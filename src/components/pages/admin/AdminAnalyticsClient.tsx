@@ -8,10 +8,14 @@ import { TrendingUp, Building2, Users, Calendar, DollarSign, Loader2, MapPin } f
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-export function AdminAnalyticsClient() {
+interface AdminAnalyticsClientProps {
+  initialData?: any;
+}
+
+export function AdminAnalyticsClient({ initialData }: AdminAnalyticsClientProps = {}) {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
-  const [analytics, setAnalytics] = useState<any>({
+  const [analytics, setAnalytics] = useState<any>(initialData || {
     totalVenues: 0,
     totalUsers: 0,
     totalBookings: 0,
@@ -26,7 +30,7 @@ export function AdminAnalyticsClient() {
       revenueThisMonth: 0,
     }
   });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialData);
   const [authChecking, setAuthChecking] = useState(true);
 
   useEffect(() => {
@@ -50,7 +54,9 @@ export function AdminAnalyticsClient() {
         }
 
         setUser(user);
-        fetchAnalytics();
+        if (!initialData) {
+          fetchAnalytics();
+        }
       } else {
         router.push('/admin');
       }
