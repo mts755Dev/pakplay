@@ -82,64 +82,66 @@ export function OwnerVenueEditClient({ venueId, initialVenue }: OwnerVenueEditCl
 
   // Initialize form with venue data from server
   useEffect(() => {
-    if (initialVenue) {
-      setExistingPhotos(initialVenue.venue_photos || []);
-      
-      // Set logo preview if exists
-      if (initialVenue.logo_url) {
-        setLogoPreview(initialVenue.logo_url);
-      }
+    try {
+      if (initialVenue) {
+        setExistingPhotos(initialVenue.venue_photos || []);
+        
+        // Set logo preview if exists
+        if (initialVenue.logo_url) {
+          setLogoPreview(initialVenue.logo_url);
+        }
 
-      // Populate form data
-      setFormData({
-        venueName: initialVenue.name || "",
-        sport: initialVenue.sport_type || "",
-        province: initialVenue.province || "",
-        city: initialVenue.city || "",
-        area: initialVenue.area || "",
-        subArea: initialVenue.sub_area || "",
-        address: initialVenue.address || "",
-        pricePerHour: initialVenue.price_per_hour?.toString() || "",
-        phone: initialVenue.whatsapp_number || "",
-        openingTime: initialVenue.opening_time || "",
-        closingTime: initialVenue.closing_time || "",
-        is24_7: initialVenue.is_24_7 || false,
-        description: initialVenue.description || "",
-        amenities: initialVenue.amenities || [],
-        // Branding & customization
-        tagline: initialVenue.tagline || "",
-        facebookUrl: initialVenue.facebook_url || "",
-        instagramUrl: initialVenue.instagram_url || "",
-        twitterUrl: initialVenue.twitter_url || "",
-        websiteUrl: initialVenue.website_url || "",
-        videoUrl: initialVenue.video_url || "",
-        yearsInBusiness: initialVenue.years_in_business?.toString() || "",
-        totalCustomers: initialVenue.total_customers?.toString() || "",
-        googleMapsUrl: initialVenue.google_maps_url || "",
-      });
+        // Populate form data
+        setFormData({
+          venueName: initialVenue.name || "",
+          sport: initialVenue.sport_type || "",
+          province: initialVenue.province || "",
+          city: initialVenue.city || "",
+          area: initialVenue.area || "",
+          subArea: initialVenue.sub_area || "",
+          address: initialVenue.address || "",
+          pricePerHour: initialVenue.price_per_hour?.toString() || "",
+          phone: initialVenue.whatsapp_number || "",
+          openingTime: initialVenue.opening_time || "",
+          closingTime: initialVenue.closing_time || "",
+          is24_7: initialVenue.is_24_7 || false,
+          description: initialVenue.description || "",
+          amenities: initialVenue.amenities || [],
+          // Branding & customization
+          tagline: initialVenue.tagline || "",
+          facebookUrl: initialVenue.facebook_url || "",
+          instagramUrl: initialVenue.instagram_url || "",
+          twitterUrl: initialVenue.twitter_url || "",
+          websiteUrl: initialVenue.website_url || "",
+          videoUrl: initialVenue.video_url || "",
+          yearsInBusiness: initialVenue.years_in_business?.toString() || "",
+          totalCustomers: initialVenue.total_customers?.toString() || "",
+          googleMapsUrl: initialVenue.google_maps_url || "",
+        });
 
-      // Populate pricing rules
-      if (initialVenue.venue_pricing_rules && initialVenue.venue_pricing_rules.length > 0) {
-        const rules = initialVenue.venue_pricing_rules.reduce((acc: any[], rule: any) => {
-          // Group rules by priority
-          const existingRule = acc.find(r => r.priority === rule.priority);
-          if (existingRule) {
-            if (rule.day_of_week !== null) {
-              existingRule.daysOfWeek.push(rule.day_of_week.toString());
+        // Populate pricing rules
+        if (initialVenue.venue_pricing_rules && initialVenue.venue_pricing_rules.length > 0) {
+          const rules = initialVenue.venue_pricing_rules.reduce((acc: any[], rule: any) => {
+            // Group rules by priority
+            const existingRule = acc.find(r => r.priority === rule.priority);
+            if (existingRule) {
+              if (rule.day_of_week !== null) {
+                existingRule.daysOfWeek.push(rule.day_of_week.toString());
+              }
+            } else {
+              acc.push({
+                id: rule.id,
+                priority: rule.priority,
+                daysOfWeek: rule.day_of_week !== null ? [rule.day_of_week.toString()] : [],
+                startTime: rule.start_time || "",
+                endTime: rule.end_time || "",
+                price: rule.price_per_hour?.toString() || "",
+              });
             }
-          } else {
-            acc.push({
-              id: rule.id,
-              priority: rule.priority,
-              daysOfWeek: rule.day_of_week !== null ? [rule.day_of_week.toString()] : [],
-              startTime: rule.start_time || "",
-              endTime: rule.end_time || "",
-              price: rule.price_per_hour?.toString() || "",
-            });
-          }
-          return acc;
-        }, []);
-        setPricingRules(rules);
+            return acc;
+          }, []);
+          setPricingRules(rules);
+        }
       }
     } catch (error: any) {
       toast.error(error.message || "Failed to load venue");
@@ -147,7 +149,7 @@ export function OwnerVenueEditClient({ venueId, initialVenue }: OwnerVenueEditCl
     } finally {
       setLoading(false);
     }
-  };
+  }, [initialVenue]);
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
