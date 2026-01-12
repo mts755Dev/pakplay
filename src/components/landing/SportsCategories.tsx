@@ -46,13 +46,26 @@ export const SportsCategories = ({ initialSports = [] }: SportsCategoriesProps) 
     queryKey: ['top-sports'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('sport_counts')
-        .select('*')
-        .order('count', { ascending: false })
-        .limit(6);
+        .from('venues' as any)
+        .select('sport_type')
+        .eq('status', 'approved');
       
       if (error) throw error;
-      return data as SportCount[];
+      
+      // Aggregate by sport type
+      const sportCounts: Record<string, number> = {};
+      data?.forEach((venue: any) => {
+        const sport = venue.sport_type;
+        sportCounts[sport] = (sportCounts[sport] || 0) + 1;
+      });
+      
+      // Convert to array and sort
+      const result = Object.entries(sportCounts)
+        .map(([sport_type, count]) => ({ sport_type, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 6);
+      
+      return result as SportCount[];
     },
     initialData: initialSports,
     staleTime: 5 * 60 * 1000,
