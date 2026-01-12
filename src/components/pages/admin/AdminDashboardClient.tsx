@@ -88,13 +88,14 @@ export function AdminDashboardClient({ initialStats }: AdminDashboardClientProps
 
       // Get venue IDs for batch queries
       const venueIds = (venuesData || []).map(v => v.id);
+      const ownerIds = (venuesData || []).map(v => v.owner_id).filter((id): id is string => id !== null);
 
       // Batch fetch profiles and first 4 photos per venue
       const [profilesData, photosData] = await Promise.all([
-        supabase
+        ownerIds.length > 0 ? supabase
             .from('profiles')
           .select('id, full_name, phone, whatsapp_number')
-          .in('id', (venuesData || []).map(v => v.owner_id)),
+          .in('id', ownerIds) : Promise.resolve({ data: [], error: null }),
         supabase
           .from('venue_photos')
           .select('*')
