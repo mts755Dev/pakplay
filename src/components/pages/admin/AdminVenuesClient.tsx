@@ -32,10 +32,14 @@ function useDebounce<T>(value: T, delay: number): T {
   return debouncedValue;
 }
 
-export function AdminVenuesClient() {
+interface AdminVenuesClientProps {
+  initialVenues?: any[];
+}
+
+export function AdminVenuesClient({ initialVenues }: AdminVenuesClientProps = {}) {
   const [user, setUser] = useState<any>(null);
-  const [venues, setVenues] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [venues, setVenues] = useState<any[]>(initialVenues || []);
+  const [loading, setLoading] = useState(!initialVenues);
   const [loadingMore, setLoadingMore] = useState(false);
   const [authChecking, setAuthChecking] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -120,11 +124,16 @@ export function AdminVenuesClient() {
         setUser(user);
         isInitialized.current = true;
         
-        // Fetch stats and initial venues in parallel
-        await Promise.all([
-          fetchStats(),
-          fetchVenues(0, true)
-        ]);
+        if (!initialVenues) {
+          // Fetch stats and initial venues in parallel
+          await Promise.all([
+            fetchStats(),
+            fetchVenues(0, true)
+          ]);
+        } else {
+          // Just fetch stats if venues already provided
+          await fetchStats();
+        }
       } else {
         window.location.href = '/admin';
       }
