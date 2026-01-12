@@ -1,0 +1,23 @@
+{
+  "name": "PakPlay - Where Pakistan Plays",
+  "short_name": "PakPlay",
+  "description": "Where Pakistan Plays — The #1 Sports Venue Booking App",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48 32x32 16x16",
+      "type": "image/x-icon"
+    }
+  ],
+  "categories": ["sports", "lifestyle", "business"],
+  "lang": "en-PK",
+  "dir": "ltr",
+  "scope": "/",
+  "prefer_related_applications": false
+}
+

@@ -1,0 +1,34 @@
+# ===========================================
+# ENVIRONMENT VARIABLES TEMPLATE
+# ===========================================
+# 
+# Copy this file to .env.local and fill in your values
+# 
+# IMPORTANT: Never commit .env.local to git!
+# ===========================================
+
+# Supabase Configuration (REQUIRED)
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url_here
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key_here
+
+# Domain Configuration (Optional - for subdomain routing)
+NEXT_PUBLIC_DOMAIN=pakplay.co
+
+# Cloudflare Turnstile (for signup captcha)
+NEXT_PUBLIC_TURNSTILE_SITE_KEY=your_turnstile_site_key_here
+
+# Google AdSense (Optional)
+NEXT_PUBLIC_GOOGLE_ADSENSE_ID=your_adsense_id_here
+
+# ===========================================
+# HOW TO SET UP:
+# ===========================================
+# 
+# 1. Create a new file called ".env.local" in the pakplay-next directory
+# 2. Copy the NEXT_PUBLIC variables above
+# 3. Replace the placeholder values with your actual credentials
+# 4. Save the file
+# 5. Restart your development server (npm run dev)
+# 
+# ===========================================
+

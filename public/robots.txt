@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /
+
+# Block admin areas
+User-agent: *
+Disallow: /admin/
+Disallow: /owner/
+
+# Allow crawling of public pages
+Allow: /
+Allow: /venues
+Allow: /pricing
+Allow: /about
+Allow: /faq
+Allow: /contact

@@ -1,0 +1,105 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* PakPlay Color System - Sunset Orange, Midnight Blue, Lime Green */
+    --background: 0 0% 97.3%; /* Off White #F8F9FA */
+    --foreground: 0 0% 13%; /* Charcoal #212121 */
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 13%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 13%;
+
+    /* Primary - Sunset Orange */
+    --primary: 16 100% 60.4%; /* #FF6B35 */
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary - Midnight Blue */
+    --secondary: 218 65% 32%; /* #1E3A8A */
+    --secondary-foreground: 0 0% 100%;
+
+    /* Accent - Lime Green */
+    --accent: 80 88% 60%; /* #A7F432 */
+    --accent-foreground: 0 0% 13%;
+
+    --muted: 0 0% 94%;
+    --muted-foreground: 0 0% 40%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 16 100% 60.4%;
+
+    --radius: 0.75rem;
+
+    /* Sidebar Colors */
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 0 0% 13%;
+    --foreground: 0 0% 97.3%;
+
+    --card: 0 0% 18%;
+    --card-foreground: 0 0% 97.3%;
+
+    --popover: 0 0% 18%;
+    --popover-foreground: 0 0% 97.3%;
+
+    --primary: 16 100% 60.4%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 218 65% 32%;
+    --secondary-foreground: 0 0% 100%;
+
+    --accent: 80 88% 60%;
+    --accent-foreground: 0 0% 13%;
+
+    --muted: 0 0% 25%;
+    --muted-foreground: 0 0% 60%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 25%;
+    --input: 0 0% 25%;
+    --ring: 16 100% 60.4%;
+    
+    /* Sidebar Colors Dark */
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
