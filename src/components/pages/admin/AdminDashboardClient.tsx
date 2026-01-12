@@ -12,17 +12,23 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getAllProvinces, getCityById } from "@/lib/locationHelpers";
 
-export function AdminDashboardClient() {
+interface AdminDashboardClientProps {
+  initialStats?: any;
+}
+
+export function AdminDashboardClient({ initialStats }: AdminDashboardClientProps = {}) {
   const [user, setUser] = useState<any>(null);
   const [pendingVenues, setPendingVenues] = useState<any[]>([]);
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState(initialStats || {
     totalVenues: 0,
     approvedVenues: 0,
     pendingVenues: 0,
     totalUsers: 0,
+    totalBookings: 0,
+    totalRevenue: 0,
   });
   const [locationStats, setLocationStats] = useState<{province: string, count: number, provinceName: string}[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialStats);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [authChecking, setAuthChecking] = useState(true);
   const [selectedVenue, setSelectedVenue] = useState<any>(null);
@@ -51,9 +57,11 @@ export function AdminDashboardClient() {
         }
 
       setUser(user);
-      fetchPendingVenues();
-      fetchStats();
-      fetchLocationStats();
+      if (!initialStats) {
+        fetchPendingVenues();
+        fetchStats();
+        fetchLocationStats();
+      }
       } else {
         window.location.href = "/admin";
       }
