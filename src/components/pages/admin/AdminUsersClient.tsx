@@ -12,12 +12,16 @@ import { Users as UsersIcon, Search, Loader2, Phone, Building2, Calendar } from 
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-export function AdminUsersClient() {
+interface AdminUsersClientProps {
+  initialUsers?: any[];
+}
+
+export function AdminUsersClient({ initialUsers }: AdminUsersClientProps = {}) {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
-  const [users, setUsers] = useState<any[]>([]);
-  const [filteredUsers, setFilteredUsers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [users, setUsers] = useState<any[]>(initialUsers || []);
+  const [filteredUsers, setFilteredUsers] = useState<any[]>(initialUsers || []);
+  const [loading, setLoading] = useState(!initialUsers);
   const [authChecking, setAuthChecking] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -46,7 +50,9 @@ export function AdminUsersClient() {
         }
 
         setUser(user);
-        fetchUsers();
+        if (!initialUsers) {
+          fetchUsers();
+        }
       } else {
         router.push('/admin');
       }
