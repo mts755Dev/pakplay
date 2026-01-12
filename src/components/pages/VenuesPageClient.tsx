@@ -153,12 +153,7 @@ interface VenuesPageClientProps {
 }
 
 export default function VenuesPageClient({ initialVenues = [], initialTotalCount = 0 }: VenuesPageClientProps) {
-  let searchParams;
-  try {
-    searchParams = useSearchParams();
-  } catch (error) {
-    searchParams = null;
-  }
+  const searchParams = useSearchParams();
   const hasServerData = initialVenues.length > 0; // Track if we have SSR data
   const [venues, setVenues] = useState<VenueWithPhotos[]>(initialVenues);
   const [initialLoading, setInitialLoading] = useState(false);
