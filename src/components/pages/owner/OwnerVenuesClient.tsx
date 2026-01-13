@@ -778,12 +778,9 @@ export function OwnerVenuesClient({ initialVenues }: OwnerVenuesClientProps) {
                   <Input id="logo" type="file" accept="image/*" onChange={handleLogoChange} className="text-xs h-8" />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label htmlFor="tagline" className="text-xs">Tagline</Label>
-                    <Input id="tagline" placeholder="e.g., Where Champions Are Made" value={formData.tagline} onChange={(e) => setFormData({...formData, tagline: e.target.value})} className="text-xs h-8" />
-                  </div>
-                  </div>
+                <div>
+                  <Label htmlFor="tagline" className="text-xs">Tagline</Label>
+                  <Input id="tagline" placeholder="e.g., Where Champions Are Made" value={formData.tagline} onChange={(e) => setFormData({...formData, tagline: e.target.value})} className="text-xs h-8" />
                 </div>
 
                 <div>
