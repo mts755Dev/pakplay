@@ -146,8 +146,6 @@ export function OwnerVenueEditClient({ venueId, initialVenue }: OwnerVenueEditCl
     } catch (error: any) {
       toast.error(error.message || "Failed to load venue");
       router.push('/owner/dashboard');
-    } finally {
-      setLoading(false);
     }
   }, [initialVenue]);
 
