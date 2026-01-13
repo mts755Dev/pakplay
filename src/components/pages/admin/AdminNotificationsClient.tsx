@@ -64,7 +64,7 @@ export function AdminNotificationsClient() {
       const { data: newUsers } = await supabase
         .from('profiles')
         .select('id, full_name, created_at')
-        .eq('role', 'owner')
+        .eq('role', 'venue_owner')
         .gte('created_at', last7Days)
         .order('created_at', { ascending: false });
 
