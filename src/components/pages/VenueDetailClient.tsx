@@ -721,25 +721,6 @@ export function VenueDetailClient({
                 "{(venue as any).tagline}"
               </p>
             )}
-
-             {/* Stats */}
-             {((venue as any).years_in_business || (venue as any).total_customers) && (
-               <div className="flex flex-wrap gap-2 md:gap-3 mb-2">
-                {(venue as any).years_in_business && (
-                  <div className="bg-white/20 backdrop-blur-sm rounded-lg px-2 sm:px-3 md:px-4 py-1.5 md:py-2 flex items-center gap-1.5 sm:gap-2">
-                    <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 md:w-5 md:h-5 shrink-0" />
-                    <span className="text-xs sm:text-sm md:text-base font-semibold whitespace-nowrap">{(venue as any).years_in_business}+ Years</span>
-                  </div>
-                )}
-                {(venue as any).total_customers && (
-                  <div className="bg-white/20 backdrop-blur-sm rounded-lg px-2 sm:px-3 md:px-4 py-1.5 md:py-2 flex items-center gap-1.5 sm:gap-2">
-                    <Users className="w-3 h-3 sm:w-4 sm:h-4 md:w-5 md:h-5 shrink-0" />
-                    <span className="text-xs sm:text-sm md:text-base font-semibold whitespace-nowrap">{(venue as any).total_customers.toLocaleString()}+ Customers</span>
-                  </div>
-                )}
-              </div>
-            )}
-            
              {/* Pricing Section */}
              <div className="mb-2">
                {activeOffer ? (
@@ -755,7 +736,7 @@ export function VenueDetailClient({
              </div>
              
              {/* Social Links */}
-             {((venue as any).facebook_url || (venue as any).instagram_url || (venue as any).twitter_url || (venue as any).website_url) && (
+             {((venue as any).facebook_url || (venue as any).instagram_url) && (
                <div className="flex flex-wrap items-center gap-2 md:gap-3">
                  {(venue as any).facebook_url && (
                    <a 
@@ -775,26 +756,6 @@ export function VenueDetailClient({
                      className="w-9 h-9 md:w-10 md:h-10 rounded-full bg-gradient-to-br from-[#F58529] via-[#DD2A7B] to-[#8134AF] flex items-center justify-center hover:opacity-80 transition-opacity"
                    >
                      <Instagram className="w-4 h-4 md:w-5 md:h-5 text-white" />
-                   </a>
-                 )}
-                 {(venue as any).twitter_url && (
-                   <a 
-                     href={(venue as any).twitter_url} 
-                     target="_blank" 
-                     rel="noopener noreferrer"
-                     className="w-9 h-9 md:w-10 md:h-10 rounded-full bg-black flex items-center justify-center hover:opacity-80 transition-opacity"
-                   >
-                     <Twitter className="w-4 h-4 md:w-5 md:h-5 text-white" />
-                   </a>
-                 )}
-                 {(venue as any).website_url && (
-                   <a 
-                     href={(venue as any).website_url} 
-                     target="_blank" 
-                     rel="noopener noreferrer"
-                     className="w-9 h-9 md:w-10 md:h-10 rounded-full bg-emerald-500 flex items-center justify-center hover:opacity-80 transition-opacity"
-                   >
-                     <Globe className="w-4 h-4 md:w-5 md:h-5 text-white" />
                    </a>
                  )}
               </div>
@@ -826,34 +787,6 @@ export function VenueDetailClient({
             {/* Ad Slot 2: Native Ad - After About */}
             <AdNative />
 
-            {/* Video Section */}
-            {(venue as any).video_url && (
-              <section className="scroll-mt-24">
-                <h2 className="text-2xl sm:text-3xl font-bold mb-4 sm:mb-6 flex items-center gap-2 sm:gap-3">
-                  <Play className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600" />
-                  Watch Video Tour
-                </h2>
-                <div className="relative aspect-video rounded-xl overflow-hidden bg-gray-100">
-                  {(venue as any).video_url.includes('youtube.com') || (venue as any).video_url.includes('youtu.be') ? (
-                    <iframe
-                      src={(venue as any).video_url.replace('watch?v=', 'embed/').replace('youtu.be/', 'youtube.com/embed/')}
-                      className="w-full h-full"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                      title="Venue Video Tour"
-                    />
-                  ) : (
-                    <video 
-                      src={(venue as any).video_url} 
-                      controls 
-                      className="w-full h-full"
-                    >
-                      Your browser does not support the video tag.
-                    </video>
-                  )}
-                </div>
-              </section>
-            )}
 
             {/* Amenities Section */}
             <section id="amenities" className="scroll-mt-24">

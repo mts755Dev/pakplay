@@ -185,11 +185,6 @@ export function OwnerVenuesClient({ initialVenues }: OwnerVenuesClientProps) {
         tagline: venueData.tagline || "",
         facebookUrl: venueData.facebook_url || "",
         instagramUrl: venueData.instagram_url || "",
-        twitterUrl: venueData.twitter_url || "",
-        websiteUrl: venueData.website_url || "",
-        videoUrl: venueData.video_url || "",
-        yearsInBusiness: venueData.years_in_business?.toString() || "",
-        totalCustomers: venueData.total_customers?.toString() || "",
         googleMapsUrl: venueData.google_maps_url || "",
       });
 
@@ -407,11 +402,6 @@ export function OwnerVenuesClient({ initialVenues }: OwnerVenuesClientProps) {
           tagline: formData.tagline || null,
           facebook_url: formData.facebookUrl || null,
           instagram_url: formData.instagramUrl || null,
-          twitter_url: formData.twitterUrl || null,
-          website_url: formData.websiteUrl || null,
-          video_url: formData.videoUrl || null,
-          years_in_business: formData.yearsInBusiness ? parseInt(formData.yearsInBusiness) : null,
-          total_customers: formData.totalCustomers ? parseInt(formData.totalCustomers) : null,
           google_maps_url: formData.googleMapsUrl || null,
         })
         .eq('id', editingVenue.id);
