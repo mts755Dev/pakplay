@@ -231,7 +231,7 @@ export function VenueDetailClient({
           *,
           venue_photos (*)
         `)
-        .eq('custom_subdomain', subdomain)
+        .eq('subdomain', subdomain)
         .eq('status', 'approved')
         .single();
 

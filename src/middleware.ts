@@ -45,7 +45,7 @@ export async function middleware(request: NextRequest) {
     const { data: venue } = await supabase
       .from('venues')
       .select('slug')
-      .eq('custom_subdomain', subdomain)
+      .eq('subdomain', subdomain)
       .eq('status', 'approved')
       .single();
     

@@ -70,7 +70,7 @@ export function OwnerSettingsClient() {
     try {
       const { data, error } = await supabase
         .from('venues')
-        .select('id, name, slug, custom_subdomain')
+        .select('id, name, slug, subdomain')
         .eq('owner_id', userId)
         .eq('status', 'approved')
         .order('created_at', { ascending: false });
@@ -82,7 +82,7 @@ export function OwnerSettingsClient() {
       // Auto-select first venue if available
       if (data && data.length > 0) {
         setSelectedVenue(data[0].id);
-        setCustomSubdomain(data[0].custom_subdomain || '');
+        setCustomSubdomain(data[0].subdomain || '');
       }
     } catch (error: any) {
       console.error('Error fetching venues:', error);
@@ -98,7 +98,7 @@ export function OwnerSettingsClient() {
     setSelectedVenue(venueId);
     const venue = venues.find(v => v.id === venueId);
     if (venue) {
-      setCustomSubdomain(venue.custom_subdomain || '');
+      setCustomSubdomain(venue.subdomain || '');
     }
   };
 
@@ -125,7 +125,7 @@ export function OwnerSettingsClient() {
       const { data: existingVenue } = await supabase
         .from('venues')
         .select('id')
-        .eq('custom_subdomain', customSubdomain)
+        .eq('subdomain', customSubdomain)
         .neq('id', selectedVenue)
         .single();
 
@@ -139,7 +139,7 @@ export function OwnerSettingsClient() {
     try {
       const { error } = await supabase
         .from('venues')
-        .update({ custom_subdomain: customSubdomain || null })
+        .update({ subdomain: customSubdomain || null })
         .eq('id', selectedVenue);
 
       if (error) throw error;
@@ -159,8 +159,8 @@ export function OwnerSettingsClient() {
 
   const copyToClipboard = async () => {
     const venue = venues.find(v => v.id === selectedVenue);
-    if (venue && venue.custom_subdomain) {
-      const url = `https://${venue.custom_subdomain}.pakplay.co`;
+    if (venue && venue.subdomain) {
+      const url = `https://${venue.subdomain}.pakplay.co`;
       await navigator.clipboard.writeText(url);
       setCopied(true);
       toast.success("URL copied to clipboard!");
@@ -339,7 +339,7 @@ export function OwnerSettingsClient() {
                               <Copy className="w-4 h-4" />
                             )}
                           </Button>
-                          {venues.find(v => v.id === selectedVenue)?.custom_subdomain && (
+                          {venues.find(v => v.id === selectedVenue)?.subdomain && (
                             <Button
                               size="sm"
                               variant="outline"
