@@ -166,8 +166,9 @@ export type Database = {
           description: string | null
           amenities: string[] | null
           price_per_hour: number
-          opening_time: string
-          closing_time: string
+          opening_time: string | null
+          closing_time: string | null
+          is_24_7: boolean
           whatsapp_number: string
           google_maps_url: string | null
           subdomain: string | null
@@ -176,6 +177,10 @@ export type Database = {
           featured: boolean
           rating: number
           total_bookings: number
+          logo_url: string | null
+          tagline: string | null
+          facebook_url: string | null
+          instagram_url: string | null
           created_at: string
           updated_at: string
         }
@@ -193,8 +198,9 @@ export type Database = {
           description?: string | null
           amenities?: string[] | null
           price_per_hour: number
-          opening_time: string
-          closing_time: string
+          opening_time?: string | null
+          closing_time?: string | null
+          is_24_7?: boolean
           whatsapp_number: string
           google_maps_url?: string | null
           subdomain?: string | null
@@ -203,6 +209,10 @@ export type Database = {
           featured?: boolean
           rating?: number
           total_bookings?: number
+          logo_url?: string | null
+          tagline?: string | null
+          facebook_url?: string | null
+          instagram_url?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -220,8 +230,9 @@ export type Database = {
           description?: string | null
           amenities?: string[] | null
           price_per_hour?: number
-          opening_time?: string
-          closing_time?: string
+          opening_time?: string | null
+          closing_time?: string | null
+          is_24_7?: boolean
           google_maps_url?: string | null
           subdomain?: string | null
           is_featured?: boolean
@@ -230,6 +241,10 @@ export type Database = {
           featured?: boolean
           rating?: number
           total_bookings?: number
+          logo_url?: string | null
+          tagline?: string | null
+          facebook_url?: string | null
+          instagram_url?: string | null
           created_at?: string
           updated_at?: string
         }
