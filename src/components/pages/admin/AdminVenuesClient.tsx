@@ -229,14 +229,14 @@ export function AdminVenuesClient({ initialVenues }: AdminVenuesClientProps = {}
 
       // Get venue IDs and owner IDs for batch queries
       const venueIds = venuesData.map(v => v.id);
-      const ownerIds = [...new Set(venuesData.map(v => v.owner_id))];
+      const ownerIds = [...new Set(venuesData.map(v => v.owner_id).filter((id): id is string => id !== null))];
 
       // Batch fetch profiles and first 4 photos per venue
       const [profilesData, photosData] = await Promise.all([
-        supabase
+        ownerIds.length > 0 ? supabase
           .from('profiles')
           .select('id, full_name, phone')
-          .in('id', ownerIds),
+          .in('id', ownerIds) : Promise.resolve({ data: [], error: null }),
         supabase
           .from('venue_photos')
           .select('id, venue_id, photo_url, display_order')
@@ -364,11 +364,15 @@ export function AdminVenuesClient({ initialVenues }: AdminVenuesClientProps = {}
 
       if (venueError) throw venueError;
 
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('full_name, phone, whatsapp_number')
-        .eq('id', venueData.owner_id)
-        .single();
+      let profileData = null;
+      if (venueData.owner_id) {
+        const { data } = await supabase
+          .from('profiles')
+          .select('full_name, phone, whatsapp_number')
+          .eq('id', venueData.owner_id)
+          .single();
+        profileData = data;
+      }
 
       const venueWithProfile = {
         ...venueData,

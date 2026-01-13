@@ -250,11 +250,15 @@ export function AdminDashboardClient({ initialStats }: AdminDashboardClientProps
 
       if (venueError) throw venueError;
 
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('full_name, phone, whatsapp_number')
-        .eq('id', venueData.owner_id)
-        .single();
+      let profileData = null;
+      if (venueData.owner_id) {
+        const { data } = await supabase
+          .from('profiles')
+          .select('full_name, phone, whatsapp_number')
+          .eq('id', venueData.owner_id)
+          .single();
+        profileData = data;
+      }
 
       const venueWithProfile = {
         ...venueData,
