@@ -454,6 +454,47 @@ export type Database = {
           }
         ]
       }
+      venue_pricing_rules: {
+        Row: {
+          id: string
+          venue_id: string
+          day_of_week: string
+          start_time: string
+          end_time: string
+          price_per_hour: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          venue_id: string
+          day_of_week: string
+          start_time: string
+          end_time: string
+          price_per_hour: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          venue_id?: string
+          day_of_week?: string
+          start_time?: string
+          end_time?: string
+          price_per_hour?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "venue_pricing_rules_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
     }
     Views: {
       [_ in never]: never
