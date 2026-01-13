@@ -31,7 +31,6 @@ interface VenueWithPhotos extends Venue {
 
 interface VenueWithReviews extends VenueWithPhotos {
   reviews: VenueReview[];
-  is_24_7?: boolean;
 }
 
 interface VenueDetailClientProps {
