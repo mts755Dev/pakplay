@@ -293,7 +293,7 @@ export function OwnerOnboardingClient() {
           owner_id: user.id,
           name: formData.venueName,
           slug: slug,
-          sport_type: formData.sport,
+          sport_type: formData.sport as 'football' | 'cricket' | 'basketball' | 'tennis' | 'badminton' | 'volleyball' | 'table-tennis' | 'squash' | 'padel' | 'futsal' | 'hockey' | 'swimming' | 'boxing' | 'martial-arts' | 'gym' | 'snooker' | 'golf' | 'kabaddi' | 'athletics' | 'cycling' | 'multi-sport',
           province: formData.province || null,
           city: formData.city,
           area: formData.area || null,
@@ -306,17 +306,12 @@ export function OwnerOnboardingClient() {
           closing_time: formData.is24_7 ? null : formData.closingTime,
           is_24_7: formData.is24_7,
           whatsapp_number: formData.phone,
-          status: 'pending',
+          status: 'pending' as 'pending' | 'approved' | 'rejected' | 'inactive',
           // Customization fields
           logo_url: logoUrl,
           tagline: formData.tagline || null,
           facebook_url: formData.facebookUrl || null,
           instagram_url: formData.instagramUrl || null,
-          twitter_url: formData.twitterUrl || null,
-          website_url: formData.websiteUrl || null,
-          video_url: formData.videoUrl || null,
-          years_in_business: formData.yearsInBusiness ? parseInt(formData.yearsInBusiness) : null,
-          total_customers: formData.totalCustomers ? parseInt(formData.totalCustomers) : null,
           google_maps_url: formData.googleMapsUrl || null,
         })
         .select()

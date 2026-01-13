@@ -389,7 +389,7 @@ export function OwnerVenuesClient({ initialVenues }: OwnerVenuesClientProps) {
         .from('venues')
         .update({
           name: formData.venueName,
-          sport_type: formData.sport,
+          sport_type: formData.sport as 'football' | 'cricket' | 'basketball' | 'tennis' | 'badminton' | 'volleyball' | 'table-tennis' | 'squash' | 'padel' | 'futsal' | 'hockey' | 'swimming' | 'boxing' | 'martial-arts' | 'gym' | 'snooker' | 'golf' | 'kabaddi' | 'athletics' | 'cycling' | 'multi-sport',
           province: formData.province || null,
           city: formData.city,
           area: formData.area || null,
