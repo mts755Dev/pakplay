@@ -61,6 +61,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // Fetch all approved venues for dynamic pages
   try {
+    // Check if environment variables are available (they might not be during build)
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.log('Supabase env vars not available, returning static sitemap only');
+      return staticPages;
+    }
+    
     const { data: venues } = await supabaseServer
       .from('venues')
       .select('slug, created_at')
