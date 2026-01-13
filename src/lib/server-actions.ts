@@ -149,9 +149,10 @@ export async function fetchInitialVenues(limit: number = 12) {
       .from('venues')
       .select(`
         id, name, slug, address, city, province, area, sub_area,
-        sport_type, price_per_hour, opening_time, closing_time, created_at,
+        sport_type, price_per_hour, opening_time, closing_time, is_24_7, created_at,
         owner_id, description, amenities, whatsapp_number, google_maps_url, subdomain, is_featured,
-        status, featured, rating, total_bookings, updated_at
+        status, featured, rating, total_bookings, updated_at,
+        logo_url, tagline, facebook_url, instagram_url
       `, { count: 'exact' })
       .eq('status', 'approved')
       .order('created_at', { ascending: false })
