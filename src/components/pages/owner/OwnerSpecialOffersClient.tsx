@@ -317,7 +317,7 @@ export function OwnerSpecialOffersClient() {
 
   return (
     <div className="flex h-screen bg-background">
-      <DashboardSidebar userRole="venue_owner" />
+      <DashboardSidebar userRole="owner" />
       
       <div className="flex-1 overflow-y-auto">
         <div className="p-8">
