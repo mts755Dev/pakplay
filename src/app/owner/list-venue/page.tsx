@@ -6,6 +6,9 @@ export const metadata: Metadata = {
   description: "Add your sports venue to PakPlay and start receiving bookings.",
 };
 
+// Force dynamic rendering - don't prerender at build time
+export const dynamic = 'force-dynamic';
+
 export default function OwnerListVenuePage() {
   return <OwnerOnboardingClient />;
 }

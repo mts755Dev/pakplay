@@ -12,6 +12,9 @@ export const metadata: Metadata = {
   },
 };
 
+// Force dynamic rendering - don't prerender at build time
+export const dynamic = 'force-dynamic';
+
 // Server Component - SSR by default
 export default function ContactPage() {
   return <ContactUsPageContent />;
