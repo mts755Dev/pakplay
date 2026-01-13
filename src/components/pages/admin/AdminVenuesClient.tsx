@@ -193,7 +193,7 @@ export function AdminVenuesClient({ initialVenues }: AdminVenuesClientProps = {}
       }
 
       if (statusFilter !== 'all') {
-        query = query.eq('status', statusFilter);
+        query = query.eq('status', statusFilter as 'approved' | 'pending' | 'rejected');
       }
 
       if (provinceFilter) {
@@ -205,7 +205,7 @@ export function AdminVenuesClient({ initialVenues }: AdminVenuesClientProps = {}
       }
 
       if (sportFilter !== 'all') {
-        query = query.eq('sport_type', sportFilter);
+        query = query.eq('sport_type', sportFilter as 'football' | 'cricket' | 'basketball' | 'tennis' | 'badminton' | 'volleyball' | 'table-tennis' | 'squash' | 'padel' | 'futsal' | 'hockey' | 'swimming' | 'boxing' | 'martial-arts' | 'gym' | 'snooker' | 'golf' | 'kabaddi' | 'athletics' | 'cycling' | 'multi-sport');
       }
 
       // Sort: featured first, then by created_at
