@@ -61,11 +61,6 @@ export function OwnerVenuesClient({ initialVenues }: OwnerVenuesClientProps) {
     tagline: "",
     facebookUrl: "",
     instagramUrl: "",
-    twitterUrl: "",
-    websiteUrl: "",
-    videoUrl: "",
-    yearsInBusiness: "",
-    totalCustomers: "",
     googleMapsUrl: "",
   });
 
@@ -788,20 +783,6 @@ export function OwnerVenuesClient({ initialVenues }: OwnerVenuesClientProps) {
                     <Label htmlFor="tagline" className="text-xs">Tagline</Label>
                     <Input id="tagline" placeholder="e.g., Where Champions Are Made" value={formData.tagline} onChange={(e) => setFormData({...formData, tagline: e.target.value})} className="text-xs h-8" />
                   </div>
-                  <div>
-                    <Label htmlFor="videoUrl" className="text-xs">Video URL</Label>
-                    <Input id="videoUrl" type="url" placeholder="YouTube/Vimeo link" value={formData.videoUrl} onChange={(e) => setFormData({...formData, videoUrl: e.target.value})} className="text-xs h-8" />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label htmlFor="yearsInBusiness" className="text-xs">Years in Business</Label>
-                    <Input id="yearsInBusiness" type="number" min="0" value={formData.yearsInBusiness} onChange={(e) => setFormData({...formData, yearsInBusiness: e.target.value})} className="text-xs h-8" />
-                  </div>
-                  <div>
-                    <Label htmlFor="totalCustomers" className="text-xs">Total Customers</Label>
-                    <Input id="totalCustomers" type="number" min="0" value={formData.totalCustomers} onChange={(e) => setFormData({...formData, totalCustomers: e.target.value})} className="text-xs h-8" />
                   </div>
                 </div>
 
@@ -837,16 +818,6 @@ export function OwnerVenuesClient({ initialVenues }: OwnerVenuesClientProps) {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label htmlFor="twitterUrl" className="text-xs">Twitter</Label>
-                    <Input id="twitterUrl" type="url" value={formData.twitterUrl} onChange={(e) => setFormData({...formData, twitterUrl: e.target.value})} className="text-xs h-8" />
-                  </div>
-                  <div>
-                    <Label htmlFor="websiteUrl" className="text-xs">Website</Label>
-                    <Input id="websiteUrl" type="url" value={formData.websiteUrl} onChange={(e) => setFormData({...formData, websiteUrl: e.target.value})} className="text-xs h-8" />
-                  </div>
-                </div>
               </div>
 
               {/* Pricing Rules - Compact */}

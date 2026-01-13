@@ -48,11 +48,6 @@ export function OwnerOnboardingClient() {
     tagline: "",
     facebookUrl: "",
     instagramUrl: "",
-    twitterUrl: "",
-    websiteUrl: "",
-    videoUrl: "",
-    yearsInBusiness: "",
-    totalCustomers: "",
     googleMapsUrl: "",
   });
 
@@ -966,45 +961,6 @@ export function OwnerOnboardingClient() {
                   />
                 </div>
 
-                {/* Business Statistics */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="yearsInBusiness">Years in Business (Optional)</Label>
-                    <Input 
-                      id="yearsInBusiness"
-                      type="number"
-                      min="0"
-                      placeholder="e.g., 5"
-                      value={formData.yearsInBusiness}
-                      onChange={(e) => setFormData({...formData, yearsInBusiness: e.target.value})}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="totalCustomers">Total Customers Served (Optional)</Label>
-                    <Input 
-                      id="totalCustomers"
-                      type="number"
-                      min="0"
-                      placeholder="e.g., 5000"
-                      value={formData.totalCustomers}
-                      onChange={(e) => setFormData({...formData, totalCustomers: e.target.value})}
-                    />
-                  </div>
-                </div>
-
-                {/* Video URL */}
-                <div>
-                  <Label htmlFor="videoUrl">Video URL (Optional)</Label>
-                  <p className="text-xs text-muted-foreground mb-2">YouTube or Vimeo video link to showcase your venue</p>
-                  <Input 
-                    id="videoUrl" 
-                    type="url"
-                    placeholder="https://www.youtube.com/watch?v=..."
-                    value={formData.videoUrl}
-                    onChange={(e) => setFormData({...formData, videoUrl: e.target.value})}
-                  />
-                </div>
-
                 {/* Google Maps URL */}
                 <div>
                   <Label htmlFor="googleMapsUrl">Google Maps Location (Optional)</Label>
@@ -1052,18 +1008,6 @@ export function OwnerOnboardingClient() {
                       placeholder="Instagram Profile URL"
                       value={formData.instagramUrl}
                       onChange={(e) => setFormData({...formData, instagramUrl: e.target.value})}
-                    />
-                    <Input 
-                      type="url"
-                      placeholder="Twitter Profile URL"
-                      value={formData.twitterUrl}
-                      onChange={(e) => setFormData({...formData, twitterUrl: e.target.value})}
-                    />
-                    <Input 
-                      type="url"
-                      placeholder="Website URL"
-                      value={formData.websiteUrl}
-                      onChange={(e) => setFormData({...formData, websiteUrl: e.target.value})}
                     />
                   </div>
                 </div>

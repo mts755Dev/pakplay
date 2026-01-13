@@ -56,11 +56,6 @@ export function OwnerVenueEditClient({ venueId, initialVenue }: OwnerVenueEditCl
     tagline: "",
     facebookUrl: "",
     instagramUrl: "",
-    twitterUrl: "",
-    websiteUrl: "",
-    videoUrl: "",
-    yearsInBusiness: "",
-    totalCustomers: "",
     googleMapsUrl: "",
   });
 
@@ -866,24 +861,12 @@ export function OwnerVenueEditClient({ venueId, initialVenue }: OwnerVenueEditCl
                     <Input id="tagline" value={formData.tagline} onChange={(e) => setFormData({...formData, tagline: e.target.value})} />
                   </div>
                   <div>
-                    <Label htmlFor="videoUrl">Video URL</Label>
-                    <Input id="videoUrl" type="url" value={formData.videoUrl} onChange={(e) => setFormData({...formData, videoUrl: e.target.value})} />
-                  </div>
-                  <div>
                     <Label htmlFor="facebookUrl">Facebook</Label>
                     <Input id="facebookUrl" type="url" value={formData.facebookUrl} onChange={(e) => setFormData({...formData, facebookUrl: e.target.value})} />
                   </div>
                   <div>
                     <Label htmlFor="instagramUrl">Instagram</Label>
                     <Input id="instagramUrl" type="url" value={formData.instagramUrl} onChange={(e) => setFormData({...formData, instagramUrl: e.target.value})} />
-                  </div>
-                  <div>
-                    <Label htmlFor="twitterUrl">Twitter</Label>
-                    <Input id="twitterUrl" type="url" value={formData.twitterUrl} onChange={(e) => setFormData({...formData, twitterUrl: e.target.value})} />
-                  </div>
-                  <div>
-                    <Label htmlFor="websiteUrl">Website</Label>
-                    <Input id="websiteUrl" type="url" value={formData.websiteUrl} onChange={(e) => setFormData({...formData, websiteUrl: e.target.value})} />
                   </div>
                 </div>
 
