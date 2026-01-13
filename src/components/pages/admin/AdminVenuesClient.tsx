@@ -299,7 +299,7 @@ export function AdminVenuesClient({ initialVenues }: AdminVenuesClientProps = {}
     try {
       const { error } = await supabase
         .from('venues')
-        .update({ status: newStatus })
+        .update({ status: newStatus as 'approved' | 'pending' | 'rejected' | 'inactive' })
         .eq('id', venueId);
 
       if (error) throw error;
@@ -308,7 +308,7 @@ export function AdminVenuesClient({ initialVenues }: AdminVenuesClientProps = {}
       
       // Update local state instead of refetching everything
       setVenues(prev => prev.map(v => 
-        v.id === venueId ? { ...v, status: newStatus } : v
+        v.id === venueId ? { ...v, status: newStatus as any } : v
       ));
       
       // Update stats
