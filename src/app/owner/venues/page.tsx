@@ -9,6 +9,9 @@ export const metadata: Metadata = {
   description: "Manage your sports venues listings.",
 };
 
+// Force dynamic rendering - don't prerender at build time
+export const dynamic = 'force-dynamic';
+
 // Server Component with SSR - Fetch data on server
 export default async function OwnerVenuesPage() {
   // Check authentication on server

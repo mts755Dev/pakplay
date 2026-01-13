@@ -44,6 +44,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   }
 }
 
+// Force dynamic rendering - don't prerender at build time
+export const dynamic = 'force-dynamic';
+
 // Server component with SSR
 export default async function VenueDetailPage({ params }: PageProps) {
   const venueData = await fetchVenueBySlug(params.slug);

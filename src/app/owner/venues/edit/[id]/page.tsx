@@ -3,6 +3,9 @@ import { getServerUserWithRole } from "@/lib/auth-server";
 import { fetchVenueForEdit } from "@/lib/server-actions";
 import { redirect, notFound } from "next/navigation";
 
+// Force dynamic rendering - don't prerender at build time
+export const dynamic = 'force-dynamic';
+
 interface PageProps {
   params: {
     id: string;

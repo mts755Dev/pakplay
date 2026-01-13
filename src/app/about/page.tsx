@@ -13,6 +13,9 @@ export const metadata: Metadata = {
   },
 };
 
+// Force dynamic rendering - don't prerender at build time
+export const dynamic = 'force-dynamic';
+
 // Server component with SSR
 export default async function AboutPage() {
   const stats = await fetchAppStats();

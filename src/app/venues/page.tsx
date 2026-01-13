@@ -7,6 +7,9 @@ export const metadata: Metadata = {
   description: "Find and book the best sports venues across Pakistan. Football, Cricket, Badminton, Tennis and more.",
 };
 
+// Force dynamic rendering - don't prerender at build time
+export const dynamic = 'force-dynamic';
+
 // Server component with SSR
 export default async function VenuesPage() {
   const { venues, totalCount } = await fetchInitialVenues(12);
