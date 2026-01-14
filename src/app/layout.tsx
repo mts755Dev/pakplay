@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { Toaster } from "@/components/ui/toaster";
@@ -91,6 +92,14 @@ export default function RootLayout({
         />
       </head>
       <body className="font-sans antialiased">
+        {/* Google AdSense */}
+        <Script
+          async
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6304905603815784"
+          crossOrigin="anonymous"
+          strategy="afterInteractive"
+        />
+        
         <Providers>
           <ScrollToTop />
           {children}

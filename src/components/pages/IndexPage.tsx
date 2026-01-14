@@ -10,6 +10,7 @@ import { StatsSection } from "@/components/landing/StatsSection";
 import { Testimonials } from "@/components/landing/Testimonials";
 import { CTASection } from "@/components/landing/CTASection";
 import { Footer } from "@/components/landing/Footer";
+import { BannerAd, InFeedAd } from "@/components/ads/AdSenseUnit";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Menu } from "lucide-react";
@@ -199,11 +200,29 @@ export function IndexPage({ initialFeaturedVenues = [], initialStats, initialSpo
       </nav>
 
       <HeroSection initialStats={initialStats} />
+      
+      {/* Ad after Hero Section */}
+      <div className="container mx-auto px-4 my-8">
+        <BannerAd className="max-w-4xl mx-auto" />
+      </div>
+      
       <SportsCategories initialSports={initialSports} />
       <VenuesShowcase initialVenues={initialFeaturedVenues} />
+      
+      {/* Ad between sections */}
+      <div className="container mx-auto px-4 my-8">
+        <InFeedAd />
+      </div>
+      
       <HowItWorks />
       <StatsSection initialStats={initialStats} />
       <Testimonials />
+      
+      {/* Ad before CTA */}
+      <div className="container mx-auto px-4 my-8">
+        <InFeedAd />
+      </div>
+      
       <CTASection />
       <Footer />
     </div>

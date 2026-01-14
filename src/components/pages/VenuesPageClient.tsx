@@ -14,6 +14,7 @@ import { useEffect, useState, useRef, useCallback, useMemo, memo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Tables } from "@/integrations/supabase/types";
 import { LocationSelector } from "@/components/LocationSelector";
+import { BannerAd, InFeedAd } from "@/components/ads/AdSenseUnit";
 import ppLogo from "@/assets/pp logo.png";
 
 type Venue = Tables<'venues'>;
@@ -516,12 +517,21 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
 
   const venueGrid = useMemo(() => (
     <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 transition-opacity duration-200 ${isFiltering ? 'opacity-60' : 'opacity-100'}`}>
-      {venues.map((venue) => (
-        <VenueCard 
-          key={venue.id} 
-          venue={venue} 
-          primaryPhoto={getPrimaryPhoto(venue)} 
-        />
+      {venues.map((venue, index) => (
+        <>
+          <VenueCard 
+            key={venue.id} 
+            venue={venue} 
+            primaryPhoto={getPrimaryPhoto(venue)} 
+          />
+          
+          {/* Show ad after every 6 venues */}
+          {(index + 1) % 6 === 0 && index !== venues.length - 1 && (
+            <div key={`ad-${index}`} className="col-span-full my-2">
+              <InFeedAd />
+            </div>
+          )}
+        </>
       ))}
     </div>
   ), [venues, getPrimaryPhoto, isFiltering]);
@@ -747,6 +757,11 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
             )}
           </Card>
         )}
+
+        {/* Banner Ad before venues */}
+        <div className="mb-6">
+          <BannerAd />
+        </div>
 
         {/* Venue Grid */}
         {venueGrid}
