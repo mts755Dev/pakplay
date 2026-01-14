@@ -138,11 +138,6 @@ export function StaticPageNav({ activePage }: StaticPageNavProps) {
               Contact Us
             </Button>
           </Link>
-          <Link href="/faq">
-            <Button variant="ghost" className={isActive('faq') ? 'text-primary hover:text-primary' : ''}>
-              FAQs
-            </Button>
-          </Link>
           <Link href="/signup">
             <Button variant="outline">List Your Venue</Button>
           </Link>
@@ -197,14 +192,6 @@ export function StaticPageNav({ activePage }: StaticPageNavProps) {
                   className={`w-full justify-start text-lg ${isActive('contact') ? 'text-primary' : ''}`}
                 >
                   Contact Us
-                </Button>
-              </Link>
-              <Link href="/faq" onClick={() => setMobileMenuOpen(false)}>
-                <Button 
-                  variant="ghost" 
-                  className={`w-full justify-start text-lg ${isActive('faq') ? 'text-primary' : ''}`}
-                >
-                  FAQs
                 </Button>
               </Link>
               <div className="border-t pt-4 mt-4">

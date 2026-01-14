@@ -145,9 +145,6 @@ export function PricingPageClient() {
             <Link href="/contact">
               <Button variant="ghost">Contact Us</Button>
             </Link>
-            <Link href="/faq">
-              <Button variant="ghost">FAQs</Button>
-            </Link>
             <Link href="/signup">
               <Button variant="outline">List Your Venue</Button>
             </Link>
@@ -183,11 +180,6 @@ export function PricingPageClient() {
                 <Link href="/contact" onClick={() => setMobileMenuOpen(false)}>
                   <Button variant="ghost" className="w-full justify-start text-lg">
                     Contact Us
-                  </Button>
-                </Link>
-                <Link href="/faq" onClick={() => setMobileMenuOpen(false)}>
-                  <Button variant="ghost" className="w-full justify-start text-lg">
-                    FAQs
                   </Button>
                 </Link>
                 <div className="border-t pt-4 mt-4">
@@ -265,7 +257,7 @@ export function PricingPageClient() {
         </div>
       </section>
 
-      {/* FAQ Section */}
+      {/* Contact Section */}
       <section className="py-12 bg-muted/30">
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto text-center">
@@ -273,14 +265,9 @@ export function PricingPageClient() {
               Questions About Pricing?
             </h2>
             <p className="text-lg text-muted-foreground mb-6">
-              Visit our FAQ page or contact our sales team for more information
+              Contact our sales team for more information
             </p>
             <div className="flex gap-4 justify-center">
-              <Link href="/faq">
-                <Button variant="outline" size="lg">
-                  View FAQs
-                </Button>
-              </Link>
               <Link href="/contact">
                 <Button size="lg" className="bg-accent hover:bg-accent/90 text-accent-foreground">
                   Contact Sales

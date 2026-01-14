@@ -80,8 +80,8 @@ export function ContactFormClient() {
             </div>
             <div>
               <h3 className="font-semibold mb-1">Email</h3>
-              <a href="mailto:pakplay@gmail.com" className="text-muted-foreground hover:text-primary transition-colors">
-                pakplay@gmail.com
+              <a href="mailto:pakplay.co@gmail.com" className="text-muted-foreground hover:text-primary transition-colors">
+                pakplay.co@gmail.com
               </a>
             </div>
           </div>

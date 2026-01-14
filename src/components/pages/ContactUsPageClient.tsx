@@ -179,9 +179,6 @@ export function ContactUsPageClient() {
             <Link href="/contact">
               <Button variant="ghost" className="text-primary hover:text-primary">Contact Us</Button>
             </Link>
-            <Link href="/faq">
-              <Button variant="ghost">FAQs</Button>
-            </Link>
             <Link href="/signup">
               <Button variant="outline">List Your Venue</Button>
             </Link>
@@ -217,11 +214,6 @@ export function ContactUsPageClient() {
                 <Link href="/contact" onClick={() => setMobileMenuOpen(false)}>
                   <Button variant="ghost" className="w-full justify-start text-lg text-primary">
                     Contact Us
-                  </Button>
-                </Link>
-                <Link href="/faq" onClick={() => setMobileMenuOpen(false)}>
-                  <Button variant="ghost" className="w-full justify-start text-lg">
-                    FAQs
                   </Button>
                 </Link>
                 <div className="border-t pt-4 mt-4">
@@ -274,8 +266,8 @@ export function ContactUsPageClient() {
                   </div>
                   <div>
                     <h3 className="font-semibold mb-1">Email</h3>
-                    <a href="mailto:pakplay@gmail.com" className="text-muted-foreground hover:text-primary transition-colors">
-                      pakplay@gmail.com
+                    <a href="mailto:pakplay.co@gmail.com" className="text-muted-foreground hover:text-primary transition-colors">
+                      pakplay.co@gmail.com
                     </a>
                   </div>
                 </div>

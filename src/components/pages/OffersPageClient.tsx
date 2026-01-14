@@ -549,9 +549,6 @@ export default function OffersPageClient({ initialOffers = [], initialTotalCount
             <Link href="/contact">
               <Button variant="ghost">Contact Us</Button>
             </Link>
-            <Link href="/faq">
-              <Button variant="ghost">FAQs</Button>
-            </Link>
             <Link href="/signup">
               <Button variant="outline">List Your Venue</Button>
             </Link>
@@ -585,9 +582,6 @@ export default function OffersPageClient({ initialOffers = [], initialTotalCount
                 </Link>
                 <Link href="/contact">
                   <Button variant="ghost" className="w-full justify-start">Contact Us</Button>
-                </Link>
-                <Link href="/faq">
-                  <Button variant="ghost" className="w-full justify-start">FAQs</Button>
                 </Link>
                 <Link href="/signup">
                   <Button variant="outline" className="w-full">List Your Venue</Button>

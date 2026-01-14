@@ -95,14 +95,9 @@ export function PricingPageContent() {
               Questions About Pricing?
             </h2>
             <p className="text-lg text-muted-foreground mb-6">
-              Visit our FAQ page or contact our sales team for more information
+              Contact our sales team for more information
             </p>
             <div className="flex gap-4 justify-center">
-              <Link href="/faq">
-                <Button variant="outline" size="lg">
-                  View FAQs
-                </Button>
-              </Link>
               <Link href="/contact">
                 <Button size="lg" className="bg-accent hover:bg-accent/90 text-accent-foreground">
                   Contact Sales

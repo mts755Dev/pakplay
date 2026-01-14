@@ -10,15 +10,15 @@ const testimonials = [
     location: "Karachi",
     rating: 5,
     text: "PakPlay made booking my weekly futsal games so easy! No more calling multiple venues. Just pick a time slot and you're done. Highly recommend!",
-    image: "https://api.dicebear.com/7.x/avataaars/svg?seed=Ahmed"
+    image: "/testimonials/ahmed-khan.jpg"
   },
   {
-    name: "Sarah Ali",
+    name: "Hassan Ali",
     role: "Badminton Enthusiast",
     location: "Lahore",
     rating: 5,
     text: "As a badminton player, finding quality courts was always a challenge. PakPlay showed me venues I never knew existed. The booking process is seamless!",
-    image: "https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah"
+    image: "/testimonials/hassan-ali.jpg"
   },
   {
     name: "Hamza Malik",
@@ -26,7 +26,7 @@ const testimonials = [
     location: "Islamabad",
     rating: 5,
     text: "We book our weekend cricket matches through PakPlay. The instant confirmation and verified venues give us peace of mind. Best decision we made!",
-    image: "https://api.dicebear.com/7.x/avataaars/svg?seed=Hamza"
+    image: "/testimonials/hamza-malik.jpg"
   }
 ];
 
@@ -37,15 +37,15 @@ const venueOwnerTestimonials = [
     location: "The Arena, Karachi",
     rating: 5,
     text: "Since joining PakPlay, our bookings increased by 60%! The platform is easy to use and the support team is always helpful. It's a game-changer for venue owners.",
-    image: "https://api.dicebear.com/7.x/avataaars/svg?seed=Faisal"
+    image: "/testimonials/faisal-ahmed.jpg"
   },
   {
-    name: "Ayesha Siddiqui",
+    name: "Usman Siddiqui",
     role: "Venue Owner",
     location: "Sports Hub, Lahore",
     rating: 5,
     text: "Managing bookings was a nightmare before PakPlay. Now everything is automated and organized. I can focus on improving my venue instead of managing calendars!",
-    image: "https://api.dicebear.com/7.x/avataaars/svg?seed=Ayesha"
+    image: "/testimonials/usman-siddiqui.jpg"
   }
 ];
 
@@ -92,7 +92,10 @@ export const Testimonials = () => {
                   <img 
                     src={testimonial.image} 
                     alt={testimonial.name}
-                    className="w-12 h-12 rounded-full bg-muted"
+                    className="w-12 h-12 rounded-full bg-muted object-cover"
+                    onError={(e) => {
+                      e.currentTarget.src = 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + testimonial.name;
+                    }}
                   />
                   <div>
                     <div className="font-bold text-foreground">{testimonial.name}</div>
@@ -145,7 +148,10 @@ export const Testimonials = () => {
                   <img 
                     src={testimonial.image} 
                     alt={testimonial.name}
-                    className="w-12 h-12 rounded-full bg-muted"
+                    className="w-12 h-12 rounded-full bg-muted object-cover"
+                    onError={(e) => {
+                      e.currentTarget.src = 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + testimonial.name;
+                    }}
                   />
                   <div>
                     <div className="font-bold text-foreground">{testimonial.name}</div>

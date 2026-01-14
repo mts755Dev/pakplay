@@ -144,7 +144,7 @@ export function PrivacyPolicyPageClient() {
               If you have any questions about this Privacy Policy, please contact us:
             </p>
             <ul className="list-none space-y-2 text-sm sm:text-base text-foreground/80">
-              <li className="break-words">Email: <a href="mailto:pakplay@gmail.com" className="text-primary hover:underline">pakplay@gmail.com</a></li>
+              <li className="break-words">Email: <a href="mailto:pakplay.co@gmail.com" className="text-primary hover:underline">pakplay.co@gmail.com</a></li>
               <li>Phone: <a href="https://wa.me/923166742882" className="text-primary hover:underline">+92 316 6742882</a></li>
               <li>Website: <Link href="/contact" className="text-primary hover:underline">Contact Form</Link></li>
             </ul>

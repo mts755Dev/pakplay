@@ -66,8 +66,8 @@ export const Footer = () => {
                   </Link>
                 </li>
                 <li>
-                  <Link href="/faq" className="hover:text-secondary-foreground transition-colors">
-                    FAQs
+                  <Link href="/offers" className="hover:text-secondary-foreground transition-colors">
+                    Offers
                   </Link>
                 </li>
               </ul>
@@ -123,8 +123,8 @@ export const Footer = () => {
               <ul className="space-y-3 text-secondary-foreground/80">
                 <li className="flex items-center gap-2">
                   <Mail className="w-4 h-4" />
-                  <a href="mailto:pakplay@gmail.com" className="hover:text-secondary-foreground transition-colors">
-                    pakplay@gmail.com
+                  <a href="mailto:pakplay.co@gmail.com" className="hover:text-secondary-foreground transition-colors">
+                    pakplay.co@gmail.com
                   </a>
                 </li>
                 <li className="flex items-center gap-2">
