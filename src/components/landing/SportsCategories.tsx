@@ -7,27 +7,12 @@ import { supabase } from "@/integrations/supabase/client";
 
 // Sport emojis mapping
 const sportEmojis: Record<string, string> = {
-  padel: "🎾",
   cricket: "🏏",
-  futsal: "⚽",
-  badminton: "🏸",
   football: "⚽",
-  basketball: "🏀",
-  tennis: "🎾",
-  volleyball: "🏐",
-  'table-tennis': "🏓",
-  squash: "🎾",
-  hockey: "🏑",
-  swimming: "🏊",
-  boxing: "🥊",
-  'martial-arts': "🥋",
-  gym: "🏋️",
-  snooker: "🎱",
-  golf: "⛳",
-  kabaddi: "🤼",
-  athletics: "🏃",
-  cycling: "🚴",
-  'multi-sport': "🏆",
+  futsal: "⚽",
+  pickleball: "🏓",
+  badminton: "🏸",
+  padel: "🎾",
 };
 
 interface SportCount {

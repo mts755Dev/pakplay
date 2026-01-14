@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Search, MapPin, Star, Loader2, Clock, Menu } from "lucide-react";
+import { Search, MapPin, Star, Loader2, Clock, Menu, Tag } from "lucide-react";
 import { useEffect, useState, useRef, useCallback, useMemo, memo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Tables } from "@/integrations/supabase/types";
@@ -20,31 +20,27 @@ type Venue = Tables<'venues'>;
 type VenuePhoto = Tables<'venue_photos'>;
 type SpecialOffer = Tables<'special_offers'>;
 
-interface VenueWithPhotos extends Venue {
-  venue_photos: VenuePhoto[];
-  active_offer?: SpecialOffer | null;
-  calculated_rating?: number;
-  review_count?: number;
+interface OfferWithVenue extends SpecialOffer {
+  venues: Venue & {
+    venue_photos: VenuePhoto[];
+    calculated_rating?: number;
+    review_count?: number;
+  };
 }
 
 const formatTime = (time: string | null) => {
   if (!time) return 'N/A';
   try {
-    // Parse time string (HH:mm:ss format)
     const [hours, minutes] = time.split(':').map(Number);
-    
-    // Convert to 12-hour format
     const period = hours >= 12 ? 'PM' : 'AM';
     const hour12 = hours % 12 || 12;
-    
-    // Format with leading zeros
     return `${hour12.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} ${period}`;
   } catch (e) {
     return 'N/A';
   }
 };
 
-const VENUES_PER_PAGE = 12;
+const OFFERS_PER_PAGE = 12;
 
 // Debounce hook for search optimization
 function useDebounce<T>(value: T, delay: number): T {
@@ -63,13 +59,14 @@ function useDebounce<T>(value: T, delay: number): T {
   return debouncedValue;
 }
 
-// Memoized Venue Card component to prevent unnecessary re-renders
-const VenueCard = memo(({ venue, primaryPhoto }: { venue: VenueWithPhotos; primaryPhoto: string | undefined }) => {
+// Memoized Offer Card component
+const OfferCard = memo(({ offer, primaryPhoto }: { offer: OfferWithVenue; primaryPhoto: string | undefined }) => {
   const [imageError, setImageError] = useState(false);
+  const venue = offer.venues;
   
   return (
     <Link href={`/venue/${venue.slug}`}>
-      <Card className="overflow-hidden hover:shadow-xl transition-all cursor-pointer h-full">
+      <Card className="overflow-hidden hover:shadow-xl transition-all cursor-pointer h-full border-2 border-primary/20">
         <div className="h-40 sm:h-48 bg-secondary/10 relative">
           {primaryPhoto && !imageError ? (
             <img 
@@ -84,6 +81,16 @@ const VenueCard = memo(({ venue, primaryPhoto }: { venue: VenueWithPhotos; prima
               No photo
             </div>
           )}
+          
+          {/* Offer Badge */}
+          <div className="absolute top-2 left-2 sm:top-4 sm:left-4">
+            <Badge variant="destructive" className="text-xs sm:text-sm font-bold shadow-lg">
+              <Tag className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+              {offer.discount_percentage}% OFF
+            </Badge>
+          </div>
+          
+          {/* Rating Badge */}
           {Number(venue.calculated_rating) > 0 ? (
             <div className="absolute top-2 right-2 sm:top-4 sm:right-4 bg-white/95 backdrop-blur-sm text-gray-900 px-2 py-1 sm:px-3 rounded-full text-xs sm:text-sm font-semibold flex items-center gap-1 shadow-lg">
               <Star className="w-3 h-3 sm:w-4 sm:h-4 fill-yellow-400 text-yellow-400" />
@@ -94,6 +101,12 @@ const VenueCard = memo(({ venue, primaryPhoto }: { venue: VenueWithPhotos; prima
         </div>
         <div className="p-4 sm:p-6">
           <h3 className="text-lg sm:text-xl font-bold mb-2 text-foreground">{venue.name}</h3>
+          
+          {/* Offer Name */}
+          {offer.offer_name && (
+            <p className="text-sm text-primary font-semibold mb-2 line-clamp-1">{offer.offer_name}</p>
+          )}
+          
           <div className="flex items-center gap-2 text-muted-foreground mb-2 text-xs sm:text-sm">
             <MapPin className="w-3 h-3 sm:w-4 sm:h-4 shrink-0" />
             <span className="line-clamp-1">
@@ -109,33 +122,21 @@ const VenueCard = memo(({ venue, primaryPhoto }: { venue: VenueWithPhotos; prima
               }
             </span>
           </div>
+          
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-2">
             <div className="min-w-0 flex-1">
-              {venue.active_offer ? (
-                <>
-                  <p className="text-xs sm:text-sm text-muted-foreground">Starting from</p>
-                  <div className="flex items-center gap-1 sm:gap-2 mb-1 flex-wrap">
-                    <p className="text-lg sm:text-2xl font-bold text-primary whitespace-nowrap">
-                      PKR {venue.active_offer.offer_price.toLocaleString()}/hr
-                    </p>
-                    <p className="text-xs sm:text-sm text-muted-foreground line-through whitespace-nowrap">
-                      PKR {venue.active_offer.original_price.toLocaleString()}
-                    </p>
-                  </div>
-                  {venue.active_offer.discount_percentage && (
-                    <Badge variant="destructive" className="text-xs">
-                      {venue.active_offer.discount_percentage}% OFF
-                    </Badge>
-                  )}
-                </>
-              ) : (
-                <>
-                  <p className="text-xs sm:text-sm text-muted-foreground">Starting from</p>
-                  <p className="text-lg sm:text-2xl font-bold text-primary whitespace-nowrap">
-                    PKR {venue.price_per_hour.toLocaleString()}/hr
-                  </p>
-                </>
-              )}
+              <p className="text-xs sm:text-sm text-muted-foreground">Special Offer Price</p>
+              <div className="flex items-center gap-1 sm:gap-2 mb-1 flex-wrap">
+                <p className="text-lg sm:text-2xl font-bold text-primary whitespace-nowrap">
+                  PKR {offer.offer_price.toLocaleString()}/hr
+                </p>
+                <p className="text-xs sm:text-sm text-muted-foreground line-through whitespace-nowrap">
+                  PKR {offer.original_price.toLocaleString()}
+                </p>
+              </div>
+              <p className="text-xs text-green-600 font-medium">
+                Save PKR {(offer.original_price - offer.offer_price).toLocaleString()}
+              </p>
             </div>
             <Button className="w-full sm:w-auto">Book Now</Button>
           </div>
@@ -145,21 +146,21 @@ const VenueCard = memo(({ venue, primaryPhoto }: { venue: VenueWithPhotos; prima
   );
 });
 
-VenueCard.displayName = 'VenueCard';
+OfferCard.displayName = 'OfferCard';
 
-interface VenuesPageClientProps {
-  initialVenues?: VenueWithPhotos[];
+interface OffersPageClientProps {
+  initialOffers?: OfferWithVenue[];
   initialTotalCount?: number;
 }
 
-export default function VenuesPageClient({ initialVenues = [], initialTotalCount = 0 }: VenuesPageClientProps) {
+export default function OffersPageClient({ initialOffers = [], initialTotalCount = 0 }: OffersPageClientProps) {
   const searchParams = useSearchParams();
-  const hasServerData = initialVenues.length > 0; // Track if we have SSR data
-  const [venues, setVenues] = useState<VenueWithPhotos[]>(initialVenues);
+  const hasServerData = initialOffers.length > 0;
+  const [offers, setOffers] = useState<OfferWithVenue[]>(initialOffers);
   const [initialLoading, setInitialLoading] = useState(false);
   const [isFiltering, setIsFiltering] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(initialTotalCount > initialVenues.length);
+  const [hasMore, setHasMore] = useState(initialTotalCount > initialOffers.length);
   const [totalCount, setTotalCount] = useState(initialTotalCount);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedProvince, setSelectedProvince] = useState("");
@@ -174,17 +175,16 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
   const [userRole, setUserRole] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   
-  const [offset, setOffset] = useState(hasServerData ? initialVenues.length : 0);
+  const [offset, setOffset] = useState(hasServerData ? initialOffers.length : 0);
   const observerTarget = useRef<HTMLDivElement>(null);
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [hasLoadedInitial, setHasLoadedInitial] = useState(hasServerData); // Track if initial data loaded
+  const [hasLoadedInitial, setHasLoadedInitial] = useState(hasServerData);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     setMounted(true);
     
-    // Load from cache immediately after mount
     const cachedRole = localStorage.getItem('user_role');
     if (cachedRole) {
       setUserRole(cachedRole);
@@ -192,7 +192,6 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
     
     checkUser();
 
-    // Listen to auth changes for real-time updates
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       try {
         if (session?.user) {
@@ -214,7 +213,6 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
           localStorage.removeItem('user_role');
         }
       } catch (error) {
-        // Handle auth state change errors during logout/navigation
         console.error('Auth state change error:', error);
       }
     });
@@ -234,9 +232,8 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
   useEffect(() => {
     if (!isInitialized) return;
     
-    // Skip initial fetch if we have server data and no filters are applied
     if (hasLoadedInitial && !debouncedSearchTerm && selectedProvince === "" && selectedCity === "" && selectedArea === "" && selectedSubArea === "" && selectedSport === "all" && priceSort === "none" && minPrice === "" && maxPrice === "") {
-      setHasLoadedInitial(false); // Mark that we've checked initial load
+      setHasLoadedInitial(false);
       return;
     }
     
@@ -253,14 +250,14 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
       setIsFiltering(true);
     }
     
-    fetchVenues(0, isFirstFetch);
+    fetchOffers(0, isFirstFetch);
   }, [isInitialized, debouncedSearchTerm, selectedProvince, selectedCity, selectedArea, selectedSubArea, selectedSport, priceSort, minPrice, maxPrice]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && hasMore && !loadingMore && !initialLoading && !isFiltering) {
-          loadMoreVenues();
+          loadMoreOffers();
         }
       },
       { threshold: 0.1, rootMargin: '100px' }
@@ -284,7 +281,6 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
       if (session?.user) {
         setUser(session.user);
         
-        // Fetch fresh role from database
         const { data: profile } = await supabase
           .from('profiles')
           .select('role')
@@ -315,7 +311,7 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
     return 'Sign In';
   };
 
-  const fetchVenues = async (fetchOffset: number, isInitialFetch: boolean = false) => {
+  const fetchOffers = async (fetchOffset: number, isInitialFetch: boolean = false) => {
     abortControllerRef.current = new AbortController();
     
     try {
@@ -326,78 +322,83 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
       }
 
       let query = supabase
-        .from('venues')
+        .from('special_offers')
         .select(`
-          id,
-          name,
-          slug,
-          address,
-          city,
-          province,
-          area,
-          sub_area,
-          sport_type,
-          price_per_hour,
-          opening_time,
-          closing_time,
-          created_at
+          *,
+          venues!inner(
+            id,
+            name,
+            slug,
+            address,
+            city,
+            province,
+            area,
+            sub_area,
+            sport_type,
+            price_per_hour,
+            opening_time,
+            closing_time,
+            created_at
+          )
         `, { count: 'exact' })
-        .eq('status', 'approved');
+        .eq('is_active', true)
+        .gte('valid_until', new Date().toISOString())
+        .eq('venues.status', 'approved');
 
       if (debouncedSearchTerm) {
-        query = query.or(`name.ilike.%${debouncedSearchTerm}%,description.ilike.%${debouncedSearchTerm}%`);
+        query = query.or(`offer_name.ilike.%${debouncedSearchTerm}%,description.ilike.%${debouncedSearchTerm}%,venues.name.ilike.%${debouncedSearchTerm}%`);
       }
 
       if (selectedProvince) {
-        query = query.eq('province', selectedProvince);
+        query = query.eq('venues.province', selectedProvince);
       }
 
       if (selectedCity) {
-        query = query.eq('city', selectedCity);
+        query = query.eq('venues.city', selectedCity);
       }
 
       if (selectedArea) {
-        query = query.eq('area', selectedArea);
+        query = query.eq('venues.area', selectedArea);
       }
 
       if (selectedSubArea) {
-        query = query.eq('sub_area', selectedSubArea);
+        query = query.eq('venues.sub_area', selectedSubArea);
       }
 
       if (selectedSport !== 'all') {
-        query = query.eq('sport_type', selectedSport as any);
+        query = query.eq('venues.sport_type', selectedSport as any);
       }
 
       const minPriceNum = minPrice ? parseFloat(minPrice) : null;
       const maxPriceNum = maxPrice ? parseFloat(maxPrice) : null;
 
       if (minPriceNum !== null) {
-        query = query.gte('price_per_hour', minPriceNum);
+        query = query.gte('offer_price', minPriceNum);
       }
 
       if (maxPriceNum !== null) {
-        query = query.lte('price_per_hour', maxPriceNum);
+        query = query.lte('offer_price', maxPriceNum);
       }
 
       if (priceSort === 'low-to-high') {
-        query = query.order('price_per_hour', { ascending: true });
+        query = query.order('offer_price', { ascending: true });
       } else if (priceSort === 'high-to-low') {
-        query = query.order('price_per_hour', { ascending: false });
+        query = query.order('offer_price', { ascending: false });
       } else {
         query = query.order('created_at', { ascending: false });
       }
 
-      query = query.range(fetchOffset, fetchOffset + VENUES_PER_PAGE - 1);
+      query = query.range(fetchOffset, fetchOffset + OFFERS_PER_PAGE - 1);
 
       const { data, error, count } = await query;
 
       if (error) throw error;
 
-      const venueIds = (data || []).map(v => v.id);
+      const venueIds = (data || []).map((o: any) => o.venues.id);
       
       if (venueIds.length === 0) {
         if (fetchOffset === 0) {
-          setVenues([]);
+          setOffers([]);
           setTotalCount(count || 0);
         }
         setHasMore(false);
@@ -407,21 +408,13 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
         return;
       }
 
-      const [photosResult, offersResult, reviewsResult] = await Promise.all([
+      const [photosResult, reviewsResult] = await Promise.all([
         supabase
           .from('venue_photos')
           .select('*')
           .in('venue_id', venueIds)
           .order('is_primary', { ascending: false })
           .order('display_order', { ascending: true }),
-        supabase
-          .from('special_offers')
-          .select('*')
-          .in('venue_id', venueIds)
-          .eq('is_active', true)
-          .lte('valid_from', new Date().toISOString())
-          .gte('valid_until', new Date().toISOString())
-          .order('created_at', { ascending: false }),
         supabase
           .from('venue_reviews')
           .select('venue_id, rating')
@@ -436,13 +429,6 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
         photosByVenue.get(photo.venue_id)!.push(photo as VenuePhoto);
       });
 
-      const offersByVenue = new Map();
-      (offersResult.data || []).forEach(offer => {
-        if (!offersByVenue.has(offer.venue_id)) {
-          offersByVenue.set(offer.venue_id, offer);
-        }
-      });
-
       const reviewsByVenue = new Map();
       (reviewsResult.data || []).forEach(review => {
         if (!reviewsByVenue.has(review.venue_id)) {
@@ -451,37 +437,39 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
         reviewsByVenue.get(review.venue_id).push(review);
       });
 
-      const venuesWithData = (data || []).map((venue: any) => {
-        const venueReviews = reviewsByVenue.get(venue.id) || [];
+      const offersWithData = (data || []).map((offer: any) => {
+        const venueReviews = reviewsByVenue.get(offer.venues.id) || [];
         const calculatedRating = venueReviews.length > 0
           ? venueReviews.reduce((acc: number, r: any) => acc + r.rating, 0) / venueReviews.length
           : 0;
 
-        const venuePhotos = photosByVenue.get(venue.id) || [];
+        const venuePhotos = photosByVenue.get(offer.venues.id) || [];
 
         return {
-          ...venue,
-          venue_photos: venuePhotos,
-          active_offer: offersByVenue.get(venue.id) || null,
-          calculated_rating: calculatedRating,
-          review_count: venueReviews.length
+          ...offer,
+          venues: {
+            ...offer.venues,
+            venue_photos: venuePhotos,
+            calculated_rating: calculatedRating,
+            review_count: venueReviews.length
+          }
         };
       });
 
       if (fetchOffset === 0) {
-        setVenues(venuesWithData);
+        setOffers(offersWithData);
         setTotalCount(count || 0);
       } else {
-        setVenues(prev => [...prev, ...venuesWithData]);
+        setOffers(prev => [...prev, ...offersWithData]);
       }
       
-      const newOffset = fetchOffset + VENUES_PER_PAGE;
+      const newOffset = fetchOffset + OFFERS_PER_PAGE;
       setOffset(newOffset);
       setHasMore(count ? newOffset < count : false);
       
     } catch (error: any) {
       if (error?.name === 'AbortError') return;
-      console.error('Error fetching venues:', error);
+      console.error('Error fetching offers:', error);
     } finally {
       setInitialLoading(false);
       setIsFiltering(false);
@@ -489,9 +477,9 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
     }
   };
 
-  const loadMoreVenues = useCallback(() => {
+  const loadMoreOffers = useCallback(() => {
     if (loadingMore || !hasMore || initialLoading || isFiltering) return;
-    fetchVenues(offset, false);
+    fetchOffers(offset, false);
   }, [loadingMore, hasMore, initialLoading, isFiltering, offset]);
 
   const clearAllFilters = () => {
@@ -506,7 +494,8 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
     setMaxPrice("");
   };
 
-  const getPrimaryPhoto = useCallback((venue: VenueWithPhotos) => {
+  const getPrimaryPhoto = useCallback((offer: OfferWithVenue) => {
+    const venue = offer.venues;
     if (!venue.venue_photos || venue.venue_photos.length === 0) {
       return undefined;
     }
@@ -514,19 +503,19 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
     return primary?.photo_url || venue.venue_photos[0]?.photo_url;
   }, []);
 
-  const venueGrid = useMemo(() => (
+  const offerGrid = useMemo(() => (
     <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 transition-opacity duration-200 ${isFiltering ? 'opacity-60' : 'opacity-100'}`}>
-      {venues.map((venue) => (
-        <VenueCard 
-          key={venue.id} 
-          venue={venue} 
-          primaryPhoto={getPrimaryPhoto(venue)} 
+      {offers.map((offer) => (
+        <OfferCard 
+          key={offer.id} 
+          offer={offer} 
+          primaryPhoto={getPrimaryPhoto(offer)} 
         />
       ))}
     </div>
-  ), [venues, getPrimaryPhoto, isFiltering]);
+  ), [offers, getPrimaryPhoto, isFiltering]);
 
-  if (initialLoading && venues.length === 0) {
+  if (initialLoading && offers.length === 0) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -617,8 +606,8 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
       <div className="container mx-auto px-4 py-6 sm:py-8 md:py-12">
         {/* Header */}
         <div className="mb-6 sm:mb-8 md:mb-12">
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-3 sm:mb-4 text-foreground">Discover Venues</h1>
-          <p className="text-base sm:text-lg md:text-xl text-muted-foreground">Find the perfect sports venue for your next game</p>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-3 sm:mb-4 text-foreground">Special Offers</h1>
+          <p className="text-base sm:text-lg md:text-xl text-muted-foreground">Exclusive discounts on top sports venues - Save more on your bookings!</p>
         </div>
 
         {/* Filters */}
@@ -627,12 +616,12 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
             {/* First Row: Search and Sport Type */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="search">Search Venue</Label>
+                <Label htmlFor="search">Search Offers</Label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4 sm:w-5 sm:h-5" />
                 <Input 
                     id="search"
-                  placeholder="Search by venue name..." 
+                  placeholder="Search by venue or offer name..." 
                   className="pl-9 sm:pl-10"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -719,7 +708,7 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
         <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <p className="text-muted-foreground">
-              Showing <span className="font-semibold text-foreground">{venues.length}</span> of <span className="font-semibold text-foreground">{totalCount}</span> venue{totalCount !== 1 ? 's' : ''}
+              Showing <span className="font-semibold text-foreground">{offers.length}</span> of <span className="font-semibold text-foreground">{totalCount}</span> offer{totalCount !== 1 ? 's' : ''}
             </p>
             {isFiltering && (
               <Loader2 className="w-4 h-4 animate-spin text-primary" />
@@ -738,31 +727,31 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
         </div>
 
         {/* No Results */}
-        {!initialLoading && !isFiltering && venues.length === 0 && (
+        {!initialLoading && !isFiltering && offers.length === 0 && (
           <Card className="p-6 sm:p-8 md:p-12 text-center">
-            <h3 className="text-lg sm:text-xl font-bold mb-2">No venues found</h3>
+            <h3 className="text-lg sm:text-xl font-bold mb-2">No offers found</h3>
             <p className="text-sm sm:text-base text-muted-foreground mb-4">
               {totalCount === 0 
-                ? "No venues have been listed yet. Be the first to list your venue!"
+                ? "No active offers at the moment. Check back soon for exciting deals!"
                 : "Try adjusting your filters to see more results"}
             </p>
             {totalCount === 0 && (
-              <Link href="/signup">
-                <Button>List Your Venue</Button>
+              <Link href="/venues">
+                <Button>Browse All Venues</Button>
               </Link>
             )}
           </Card>
         )}
 
-        {/* Venue Grid */}
-        {venueGrid}
+        {/* Offer Grid */}
+        {offerGrid}
 
         {/* Infinite Scroll Trigger */}
         <div ref={observerTarget} className="mt-8 flex justify-center py-4">
           {loadingMore && (
             <div className="flex items-center gap-2 text-muted-foreground">
               <Loader2 className="w-5 h-5 animate-spin" />
-              <span>Loading more venues...</span>
+              <span>Loading more offers...</span>
             </div>
           )}
         </div>

@@ -122,6 +122,9 @@ export function IndexPage({ initialFeaturedVenues = [], initialStats, initialSpo
             <Link href="/venues">
               <Button variant="ghost" size="sm">Browse Venues</Button>
             </Link>
+            <Link href="/offers">
+              <Button variant="ghost" size="sm">Offers</Button>
+            </Link>
             <Link href="/pricing">
               <Button variant="ghost" size="sm">Pricing</Button>
             </Link>
@@ -156,6 +159,11 @@ export function IndexPage({ initialFeaturedVenues = [], initialStats, initialSpo
                 <Link href="/venues" onClick={() => setMobileMenuOpen(false)}>
                   <Button variant="ghost" className="w-full justify-start text-lg">
                     Browse Venues
+                  </Button>
+                </Link>
+                <Link href="/offers" onClick={() => setMobileMenuOpen(false)}>
+                  <Button variant="ghost" className="w-full justify-start text-lg">
+                    Offers
                   </Button>
                 </Link>
                 <Link href="/pricing" onClick={() => setMobileMenuOpen(false)}>

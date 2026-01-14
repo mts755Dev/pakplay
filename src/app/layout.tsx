@@ -14,14 +14,16 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   title: "PakPlay - Where Pakistan Plays | #1 Sports Venue Booking Platform",
   description:
-    "Book top-quality sports venues across Pakistan. Find and reserve football, cricket, badminton, tennis courts & more. Instant WhatsApp booking, real reviews, and best prices.",
+    "Book top-quality sports venues across Pakistan. Find and reserve cricket, football, futsal, pickleball, badminton & padel courts. Instant WhatsApp booking, real reviews, and best prices.",
   keywords: [
     "sports venue booking Pakistan",
     "book sports courts",
-    "football ground booking",
     "cricket pitch rental",
+    "football ground booking",
+    "futsal court booking",
+    "pickleball court Pakistan",
     "badminton court booking",
-    "tennis court Pakistan",
+    "padel court Pakistan",
     "sports facilities",
     "venue booking app",
   ],

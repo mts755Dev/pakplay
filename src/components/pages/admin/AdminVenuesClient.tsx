@@ -205,7 +205,7 @@ export function AdminVenuesClient({ initialVenues }: AdminVenuesClientProps = {}
       }
 
       if (sportFilter !== 'all') {
-        query = query.eq('sport_type', sportFilter as 'football' | 'cricket' | 'basketball' | 'tennis' | 'badminton' | 'volleyball' | 'table-tennis' | 'squash' | 'padel' | 'futsal' | 'hockey' | 'swimming' | 'boxing' | 'martial-arts' | 'gym' | 'snooker' | 'golf' | 'kabaddi' | 'athletics' | 'cycling' | 'multi-sport');
+        query = query.eq('sport_type', sportFilter as 'cricket' | 'football' | 'futsal' | 'pickleball' | 'badminton' | 'padel');
       }
 
       // Sort: featured first, then by created_at
@@ -514,19 +514,12 @@ export function AdminVenuesClient({ initialVenues }: AdminVenuesClientProps = {}
                     </SelectTrigger>
                     <SelectContent className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 max-h-[300px]">
                       <SelectItem value="all">All Sports</SelectItem>
-                      <SelectItem value="football">Football</SelectItem>
                       <SelectItem value="cricket">Cricket</SelectItem>
-                      <SelectItem value="basketball">Basketball</SelectItem>
-                      <SelectItem value="tennis">Tennis</SelectItem>
-                      <SelectItem value="badminton">Badminton</SelectItem>
-                      <SelectItem value="volleyball">Volleyball</SelectItem>
-                      <SelectItem value="table-tennis">Table Tennis</SelectItem>
-                      <SelectItem value="squash">Squash</SelectItem>
-                      <SelectItem value="padel">Padel</SelectItem>
+                      <SelectItem value="football">Football</SelectItem>
                       <SelectItem value="futsal">Futsal</SelectItem>
-                      <SelectItem value="hockey">Hockey</SelectItem>
-                      <SelectItem value="swimming">Swimming</SelectItem>
-                      <SelectItem value="multi-sport">Multi-Sport</SelectItem>
+                      <SelectItem value="pickleball">Pickleball</SelectItem>
+                      <SelectItem value="badminton">Badminton</SelectItem>
+                      <SelectItem value="padel">Padel</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

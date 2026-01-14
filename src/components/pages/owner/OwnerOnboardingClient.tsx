@@ -288,7 +288,7 @@ export function OwnerOnboardingClient() {
           owner_id: user.id,
           name: formData.venueName,
           slug: slug,
-          sport_type: formData.sport as 'football' | 'cricket' | 'basketball' | 'tennis' | 'badminton' | 'volleyball' | 'table-tennis' | 'squash' | 'padel' | 'futsal' | 'hockey' | 'swimming' | 'boxing' | 'martial-arts' | 'gym' | 'snooker' | 'golf' | 'kabaddi' | 'athletics' | 'cycling' | 'multi-sport',
+          sport_type: formData.sport as 'cricket' | 'football' | 'futsal' | 'pickleball' | 'badminton' | 'padel',
           province: formData.province || null,
           city: formData.city,
           area: formData.area || null,
@@ -548,27 +548,12 @@ export function OwnerOnboardingClient() {
                       <SelectValue placeholder="Select sport type" />
                     </SelectTrigger>
                     <SelectContent className="bg-background max-h-[300px]">
-                      <SelectItem value="football">Football</SelectItem>
                       <SelectItem value="cricket">Cricket</SelectItem>
-                      <SelectItem value="basketball">Basketball</SelectItem>
-                      <SelectItem value="tennis">Tennis</SelectItem>
-                      <SelectItem value="badminton">Badminton</SelectItem>
-                      <SelectItem value="volleyball">Volleyball</SelectItem>
-                      <SelectItem value="table-tennis">Table Tennis</SelectItem>
-                      <SelectItem value="squash">Squash</SelectItem>
-                      <SelectItem value="padel">Padel</SelectItem>
+                      <SelectItem value="football">Football</SelectItem>
                       <SelectItem value="futsal">Futsal</SelectItem>
-                      <SelectItem value="hockey">Hockey</SelectItem>
-                      <SelectItem value="swimming">Swimming</SelectItem>
-                      <SelectItem value="boxing">Boxing</SelectItem>
-                      <SelectItem value="martial-arts">Martial Arts</SelectItem>
-                      <SelectItem value="gym">Gym / Fitness</SelectItem>
-                      <SelectItem value="snooker">Snooker</SelectItem>
-                      <SelectItem value="golf">Golf</SelectItem>
-                      <SelectItem value="kabaddi">Kabaddi</SelectItem>
-                      <SelectItem value="athletics">Athletics</SelectItem>
-                      <SelectItem value="cycling">Cycling</SelectItem>
-                      <SelectItem value="multi-sport">Multi-Sport</SelectItem>
+                      <SelectItem value="pickleball">Pickleball</SelectItem>
+                      <SelectItem value="badminton">Badminton</SelectItem>
+                      <SelectItem value="padel">Padel</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

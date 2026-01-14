@@ -118,6 +118,11 @@ export function StaticPageNav({ activePage }: StaticPageNavProps) {
           <Link href="/venues">
             <Button variant="ghost">Browse Venues</Button>
           </Link>
+          <Link href="/offers">
+            <Button variant="ghost" className={isActive('offers') ? 'text-primary hover:text-primary' : ''}>
+              Offers
+            </Button>
+          </Link>
           <Link href="/pricing">
             <Button variant="ghost" className={isActive('pricing') ? 'text-primary hover:text-primary' : ''}>
               Pricing
@@ -160,6 +165,14 @@ export function StaticPageNav({ activePage }: StaticPageNavProps) {
               <Link href="/venues" onClick={() => setMobileMenuOpen(false)}>
                 <Button variant="ghost" className="w-full justify-start text-lg">
                   Browse Venues
+                </Button>
+              </Link>
+              <Link href="/offers" onClick={() => setMobileMenuOpen(false)}>
+                <Button 
+                  variant="ghost" 
+                  className={`w-full justify-start text-lg ${isActive('offers') ? 'text-primary' : ''}`}
+                >
+                  Offers
                 </Button>
               </Link>
               <Link href="/pricing" onClick={() => setMobileMenuOpen(false)}>

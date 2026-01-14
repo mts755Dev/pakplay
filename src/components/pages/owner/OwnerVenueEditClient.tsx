@@ -315,7 +315,7 @@ export function OwnerVenueEditClient({ venueId, initialVenue }: OwnerVenueEditCl
         .from('venues')
         .update({
           name: formData.venueName,
-          sport_type: formData.sport as 'football' | 'cricket' | 'basketball' | 'tennis' | 'badminton' | 'volleyball' | 'table-tennis' | 'squash' | 'padel' | 'futsal' | 'hockey' | 'swimming' | 'boxing' | 'martial-arts' | 'gym' | 'snooker' | 'golf' | 'kabaddi' | 'athletics' | 'cycling' | 'multi-sport',
+          sport_type: formData.sport as 'cricket' | 'football' | 'futsal' | 'pickleball' | 'badminton' | 'padel',
           province: formData.province || null,
           city: formData.city,
           area: formData.area || null,
@@ -496,13 +496,12 @@ export function OwnerVenueEditClient({ venueId, initialVenue }: OwnerVenueEditCl
                     <Select value={formData.sport} onValueChange={(value) => setFormData({...formData, sport: value})}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="football">Football</SelectItem>
                         <SelectItem value="cricket">Cricket</SelectItem>
-                        <SelectItem value="basketball">Basketball</SelectItem>
-                        <SelectItem value="tennis">Tennis</SelectItem>
+                        <SelectItem value="football">Football</SelectItem>
+                        <SelectItem value="futsal">Futsal</SelectItem>
+                        <SelectItem value="pickleball">Pickleball</SelectItem>
                         <SelectItem value="badminton">Badminton</SelectItem>
                         <SelectItem value="padel">Padel</SelectItem>
-                        <SelectItem value="futsal">Futsal</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

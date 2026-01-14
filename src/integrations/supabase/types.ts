@@ -157,7 +157,7 @@ export type Database = {
           owner_id: string | null
           name: string
           slug: string
-          sport_type: 'football' | 'cricket' | 'basketball' | 'tennis' | 'badminton' | 'volleyball' | 'table-tennis' | 'squash' | 'padel' | 'futsal' | 'hockey' | 'swimming' | 'boxing' | 'martial-arts' | 'gym' | 'snooker' | 'golf' | 'kabaddi' | 'athletics' | 'cycling' | 'multi-sport'
+          sport_type: 'cricket' | 'football' | 'futsal' | 'pickleball' | 'badminton' | 'padel'
           city: string
           province: string | null
           area: string | null
@@ -189,7 +189,7 @@ export type Database = {
           owner_id?: string | null
           name: string
           slug: string
-          sport_type: 'football' | 'cricket' | 'basketball' | 'tennis' | 'badminton' | 'volleyball' | 'table-tennis' | 'squash' | 'padel' | 'futsal' | 'hockey' | 'swimming' | 'boxing' | 'martial-arts' | 'gym' | 'snooker' | 'golf' | 'kabaddi' | 'athletics' | 'cycling' | 'multi-sport'
+          sport_type: 'cricket' | 'football' | 'futsal' | 'pickleball' | 'badminton' | 'padel'
           city: string
           province?: string | null
           area?: string | null
@@ -221,7 +221,7 @@ export type Database = {
           owner_id?: string | null
           name?: string
           slug?: string
-          sport_type?: 'football' | 'cricket' | 'basketball' | 'tennis' | 'badminton' | 'volleyball' | 'table-tennis' | 'squash' | 'padel' | 'futsal' | 'hockey' | 'swimming' | 'boxing' | 'martial-arts' | 'gym' | 'snooker' | 'golf' | 'kabaddi' | 'athletics' | 'cycling' | 'multi-sport'
+          sport_type?: 'cricket' | 'football' | 'futsal' | 'pickleball' | 'badminton' | 'padel'
           city?: string
           province?: string | null
           area?: string | null

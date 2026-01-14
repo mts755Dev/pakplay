@@ -235,6 +235,93 @@ export async function fetchInitialVenues(limit: number = 12) {
   }
 }
 
+/**
+ * Fetch initial offers for offers page
+ */
+export async function fetchInitialOffers(limit: number = 12) {
+  try {
+    const { data: offers, error, count } = await supabaseServer
+      .from('special_offers')
+      .select(`
+        *,
+        venues!inner(
+          id, owner_id, name, slug, sport_type, city, province, area, sub_area,
+          address, description, amenities, price_per_hour, opening_time, closing_time,
+          is_24_7, whatsapp_number, google_maps_url, subdomain, is_featured, status,
+          featured, rating, total_bookings, logo_url, tagline, facebook_url,
+          instagram_url, created_at, updated_at
+        )
+      `, { count: 'exact' })
+      .eq('is_active', true)
+      .gte('valid_until', new Date().toISOString())
+      .eq('venues.status', 'approved')
+      .order('created_at', { ascending: false })
+      .range(0, limit - 1);
+
+    if (error || !offers) {
+      return { offers: [], totalCount: 0 };
+    }
+
+    const venueIds = offers.map((o: any) => o.venues.id);
+    if (venueIds.length === 0) {
+      return { offers: offers || [], totalCount: count || 0 };
+    }
+
+    const [photosResult, reviewsResult] = await Promise.all([
+      supabaseServer
+        .from('venue_photos')
+        .select('*')
+        .in('venue_id', venueIds)
+        .order('display_order', { ascending: true }),
+      supabaseServer
+        .from('venue_reviews')
+        .select('venue_id, rating')
+        .in('venue_id', venueIds)
+    ]);
+
+    const photosMap = new Map<string, VenuePhoto[]>();
+    (photosResult.data || []).forEach(photo => {
+      if (!photosMap.has(photo.venue_id)) {
+        photosMap.set(photo.venue_id, []);
+      }
+      photosMap.get(photo.venue_id)!.push(photo);
+    });
+
+    const ratingsMap = new Map<string, { total: number; count: number }>();
+    (reviewsResult.data || []).forEach(review => {
+      if (!ratingsMap.has(review.venue_id)) {
+        ratingsMap.set(review.venue_id, { total: 0, count: 0 });
+      }
+      const current = ratingsMap.get(review.venue_id)!;
+      current.total += review.rating;
+      current.count += 1;
+    });
+
+    const offersWithData = offers.map((offer: any) => {
+      const photos = photosMap.get(offer.venues.id) || [];
+      const rating = ratingsMap.get(offer.venues.id);
+
+      return {
+        ...offer,
+        venues: {
+          ...offer.venues,
+          venue_photos: photos,
+          calculated_rating: rating ? rating.total / rating.count : 0,
+          review_count: rating ? rating.count : 0,
+        },
+      };
+    });
+
+    return {
+      offers: offersWithData,
+      totalCount: count || 0,
+    };
+  } catch (error) {
+    console.error('Error fetching initial offers:', error);
+    return { offers: [], totalCount: 0 };
+  }
+}
+
 // ==================== STATISTICS FETCHING ====================
 
 /**
