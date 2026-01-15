@@ -149,6 +149,9 @@ const nextConfig = {
     } : false,
   },
   
+  // SWC minify options for modern browsers
+  swcMinify: true,
+  
   // Target modern browsers - no legacy polyfills
   env: {
     NEXT_TELEMETRY_DISABLED: '1',
@@ -210,15 +213,7 @@ const nextConfig = {
           },
         },
       };
-      
-      // Remove unnecessary polyfills for modern browsers
-      config.resolve.alias = {
-        ...config.resolve.alias,
-      };
     }
-    
-    // Configure for modern browsers
-    config.target = ['web', 'es2020'];
     
     return config;
   },
