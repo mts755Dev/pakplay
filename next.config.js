@@ -44,8 +44,6 @@ const nextConfig = {
     // Aggressive caching for external images
     loader: 'default',
     unoptimized: false,
-    // Reduce quality for better performance
-    quality: 75,
   },
 
   // Compression - always enabled
@@ -135,8 +133,6 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: '2mb',
     },
-    // Inline CSS for critical path
-    inlineCss: true,
   },
 
   // Transpile packages that need it
