@@ -99,7 +99,7 @@ export const HeroSection = ({ initialStats }: HeroSectionProps) => {
                     setSelectedProvince(value);
                     setSelectedCity("");
                   }}>
-                    <SelectTrigger className="bg-white text-gray-900" aria-label="Select Province">
+                    <SelectTrigger className="bg-white text-gray-900">
                       <SelectValue placeholder="Select Province" />
                     </SelectTrigger>
                     <SelectContent className="bg-white text-gray-900">
@@ -114,7 +114,7 @@ export const HeroSection = ({ initialStats }: HeroSectionProps) => {
                 <div>
                   <label className="text-sm font-medium mb-2 block">City</label>
                   <Select value={selectedCity} onValueChange={setSelectedCity} disabled={!selectedProvince}>
-                    <SelectTrigger className="bg-white text-gray-900" aria-label="Select City">
+                    <SelectTrigger className="bg-white text-gray-900">
                       <SelectValue placeholder="Select City" />
                     </SelectTrigger>
                     <SelectContent className="bg-white text-gray-900">
@@ -197,8 +197,6 @@ export const HeroSection = ({ initialStats }: HeroSectionProps) => {
                 alt="Professional sports venue facility" 
                 className="rounded-2xl shadow-2xl w-full h-auto transform hover:scale-105 transition-transform duration-300"
                 priority
-                quality={75}
-                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 650px"
               />
               {/* Floating Cards */}
               <div className="absolute -bottom-6 -left-6 bg-white rounded-xl shadow-xl p-4 max-w-xs hidden lg:block">

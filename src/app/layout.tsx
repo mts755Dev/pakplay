@@ -5,12 +5,11 @@ import { Providers } from "@/components/providers";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { ScrollToTop } from "@/components/ScrollToTop";
-import { ResourceHints } from "./resource-hints";
-import { PriorityHints } from "./priority-hints";
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  maximumScale: 1,
 };
 
 export const metadata: Metadata = {
@@ -81,20 +80,6 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* Inline Critical CSS for immediate rendering */}
-        <style dangerouslySetInnerHTML={{ __html: `
-          *,::before,::after{box-sizing:border-box;border:0 solid #e5e7eb}
-          html{line-height:1.5;-webkit-text-size-adjust:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
-          body{margin:0;line-height:inherit;background-color:hsl(0 0% 97.3%);color:hsl(0 0% 13%);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
-          img{max-width:100%;height:auto}button{font:inherit;cursor:pointer}a{color:inherit;text-decoration:inherit}
-        ` }} />
-        
-        {/* Resource Hints - DNS Prefetch & Preconnect */}
-        <ResourceHints />
-        
-        {/* Priority Hints - Preload critical resources */}
-        <PriorityHints />
-        
         {/* Favicon */}
         <link rel="icon" href="/favicon.png" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
@@ -107,26 +92,12 @@ export default function RootLayout({
         />
       </head>
       <body className="font-sans antialiased">
-        {/* Service Worker Registration */}
+        {/* Google AdSense */}
         <Script
-          id="register-sw"
-          strategy="afterInteractive"
-          dangerouslySetInnerHTML={{
-            __html: `
-              if ('serviceWorker' in navigator) {
-                window.addEventListener('load', () => {
-                  navigator.serviceWorker.register('/sw.js').catch(() => {});
-                });
-              }
-            `,
-          }}
-        />
-        
-        {/* Google AdSense - Load after page interactive */}
-        <Script
+          async
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6304905603815784"
           crossOrigin="anonymous"
-          strategy="lazyOnload"
+          strategy="afterInteractive"
         />
         
         <Providers>

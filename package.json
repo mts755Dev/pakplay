@@ -2,20 +2,6 @@
   "name": "pakplay-next",
   "version": "0.1.0",
   "private": true,
-  "browserslist": {
-    "production": [
-      "chrome >= 90",
-      "edge >= 90",
-      "firefox >= 88",
-      "safari >= 14",
-      "ios >= 14"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
-  },
   "scripts": {
     "dev": "next dev --turbo -p 3000",
     "dev:normal": "next dev -p 3000",
@@ -84,7 +70,6 @@
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
     "autoprefixer": "^10.4.21",
-    "cssnano": "^6.0.3",
     "eslint": "^8.57.0",
     "eslint-config-next": "^14.2.20",
     "postcss": "^8.5.6",

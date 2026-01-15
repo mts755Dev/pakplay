@@ -16,7 +16,6 @@ import { Tables } from "@/integrations/supabase/types";
 import { LocationSelector } from "@/components/LocationSelector";
 import { BannerAd, InFeedAd } from "@/components/ads/AdSenseUnit";
 import ppLogo from "@/assets/pp logo.png";
-import Image from "next/image";
 
 type Venue = Tables<'venues'>;
 type VenuePhoto = Tables<'venue_photos'>;
@@ -69,18 +68,13 @@ function useDebounce<T>(value: T, delay: number): T {
 const VenueCard = memo(({ venue, primaryPhoto }: { venue: VenueWithPhotos; primaryPhoto: string | undefined }) => {
   const [imageError, setImageError] = useState(false);
   
-  // Optimize Supabase images with aggressive transformation
-  const optimizedPhoto = primaryPhoto && primaryPhoto.includes('supabase.co/storage')
-    ? `${primaryPhoto}?width=450&height=250&quality=70&format=webp`
-    : primaryPhoto;
-  
   return (
     <Link href={`/venue/${venue.slug}`}>
       <Card className="overflow-hidden hover:shadow-xl transition-all cursor-pointer h-full">
         <div className="h-40 sm:h-48 bg-secondary/10 relative">
-          {optimizedPhoto && !imageError ? (
+          {primaryPhoto && !imageError ? (
             <img 
-              src={optimizedPhoto} 
+              src={primaryPhoto} 
               alt={venue.name}
               className="w-full h-full object-cover"
               loading="lazy"
@@ -556,7 +550,7 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
       <nav className="bg-background border-b border-border sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center">
-            <Image src={ppLogo} alt="PakPlay" height={48} width={96} className="h-10 sm:h-12 w-auto" />
+            <img src={ppLogo.src} alt="PakPlay" className="h-10 sm:h-12 w-auto" />
           </Link>
           
           {/* Desktop Navigation */}

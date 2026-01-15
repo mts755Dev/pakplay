@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { Facebook, Instagram, Twitter, Mail, Phone } from "lucide-react";
 import ppLogo from "@/assets/pp logo.png";
-import Image from "next/image";
 
 export const Footer = () => {
   return (
@@ -13,7 +12,7 @@ export const Footer = () => {
         <div className="container mx-auto px-4 py-12">
           <div className="max-w-2xl">
             <Link href="/" className="inline-block mb-4">
-              <Image src={ppLogo} alt="PakPlay" height={64} width={128} className="h-16 w-auto" />
+              <img src={ppLogo.src} alt="PakPlay" className="h-16 w-auto" />
             </Link>
             <p className="text-gray-900 font-medium mb-2 text-lg">
               Where Pakistan Plays
@@ -28,7 +27,6 @@ export const Footer = () => {
                 href="https://facebook.com/pakplay" 
                 target="_blank" 
                 rel="noopener noreferrer"
-                aria-label="Visit our Facebook page"
                 className="w-10 h-10 rounded-full bg-primary/10 hover:bg-primary/20 text-primary flex items-center justify-center transition-colors"
               >
                 <Facebook className="w-5 h-5" />
@@ -37,7 +35,6 @@ export const Footer = () => {
                 href="https://instagram.com/pakplay" 
                 target="_blank" 
                 rel="noopener noreferrer"
-                aria-label="Visit our Instagram page"
                 className="w-10 h-10 rounded-full bg-primary/10 hover:bg-primary/20 text-primary flex items-center justify-center transition-colors"
               >
                 <Instagram className="w-5 h-5" />
@@ -46,7 +43,6 @@ export const Footer = () => {
                 href="https://twitter.com/pakplay" 
                 target="_blank" 
                 rel="noopener noreferrer"
-                aria-label="Visit our Twitter page"
                 className="w-10 h-10 rounded-full bg-primary/10 hover:bg-primary/20 text-primary flex items-center justify-center transition-colors"
               >
                 <Twitter className="w-5 h-5" />
@@ -62,7 +58,7 @@ export const Footer = () => {
           <div className="py-12 grid md:grid-cols-2 lg:grid-cols-4 gap-12">
             {/* Players Column */}
             <div>
-              <h2 className="font-bold mb-6 text-lg">For Players</h2>
+              <h4 className="font-bold mb-6 text-lg">For Players</h4>
               <ul className="space-y-3 text-secondary-foreground/80">
                 <li>
                   <Link href="/venues" className="hover:text-secondary-foreground transition-colors">
@@ -79,7 +75,7 @@ export const Footer = () => {
 
             {/* Owners Column */}
             <div>
-              <h2 className="font-bold mb-6 text-lg">For Owners</h2>
+              <h4 className="font-bold mb-6 text-lg">For Owners</h4>
               <ul className="space-y-3 text-secondary-foreground/80">
                 <li>
                   <Link href="/signup" className="hover:text-secondary-foreground transition-colors">
@@ -101,7 +97,7 @@ export const Footer = () => {
 
             {/* Company Column */}
             <div>
-              <h2 className="font-bold mb-6 text-lg">Company</h2>
+              <h4 className="font-bold mb-6 text-lg">Company</h4>
               <ul className="space-y-3 text-secondary-foreground/80">
                 <li>
                   <Link href="/about" className="hover:text-secondary-foreground transition-colors">
@@ -123,7 +119,7 @@ export const Footer = () => {
 
             {/* Contact Us Column */}
             <div>
-              <h2 className="font-bold mb-6 text-lg">Contact Us</h2>
+              <h4 className="font-bold mb-6 text-lg">Contact Us</h4>
               <ul className="space-y-3 text-secondary-foreground/80">
                 <li className="flex items-center gap-2">
                   <Mail className="w-4 h-4" />

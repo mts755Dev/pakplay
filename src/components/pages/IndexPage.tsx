@@ -16,7 +16,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { Menu } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import ppLogo from "@/assets/pp logo.png";
-import Image from "next/image";
 
 interface IndexPageProps {
   initialFeaturedVenues?: any[];
@@ -116,7 +115,7 @@ export function IndexPage({ initialFeaturedVenues = [], initialStats, initialSpo
       <nav className="bg-background border-b border-border sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center">
-            <Image src={ppLogo} alt="PakPlay" height={48} width={96} className="h-12 w-auto" priority />
+            <img src={ppLogo.src} alt="PakPlay" className="h-12 w-auto" />
           </Link>
           
           {/* Desktop Navigation */}

@@ -139,21 +139,15 @@ export const VenuesShowcase = ({ initialVenues = [] }: VenuesShowcaseProps) => {
                 const primaryPhoto = venue.venue_photos?.find((p: any) => p.is_primary)?.photo_url 
                   || venue.venue_photos?.[0]?.photo_url;
                 
-                // Optimize Supabase images with aggressive transformation
-                const optimizedPhoto = primaryPhoto && primaryPhoto.includes('supabase.co/storage')
-                  ? `${primaryPhoto}?width=450&height=250&quality=70&format=webp`
-                  : primaryPhoto;
-                
                 return (
                   <Link href={`/venue/${venue.slug}`} key={venue.id}>
                     <Card className="overflow-hidden hover:shadow-xl transition-all cursor-pointer h-full">
                       <div className="h-48 bg-secondary/10 relative">
-                        {optimizedPhoto ? (
+                        {primaryPhoto ? (
                           <img 
-                            src={optimizedPhoto} 
+                            src={primaryPhoto} 
                             alt={venue.name}
                             className="w-full h-full object-cover"
-                            loading="lazy"
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-muted-foreground">
