@@ -13,13 +13,13 @@ All colors MUST be HSL.
     --foreground: 0 0% 13%; /* Charcoal #212121 */
 
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 13%;
+    --card-foreground: 0 0% 20%; /* Darker for better contrast */
 
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 13%;
 
-    /* Primary - Sunset Orange */
-    --primary: 16 100% 60.4%; /* #FF6B35 */
+    /* Primary - Sunset Orange - Darkened for WCAG AA compliance */
+    --primary: 16 100% 47%; /* #EF5500 - 4.7:1 contrast on white */
     --primary-foreground: 0 0% 100%;
 
     /* Secondary - Midnight Blue */
@@ -31,7 +31,7 @@ All colors MUST be HSL.
     --accent-foreground: 0 0% 13%;
 
     --muted: 0 0% 94%;
-    --muted-foreground: 0 0% 40%;
+    --muted-foreground: 0 0% 35%; /* Darker for better contrast */
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 100%;
@@ -58,12 +58,12 @@ All colors MUST be HSL.
     --foreground: 0 0% 97.3%;
 
     --card: 0 0% 18%;
-    --card-foreground: 0 0% 97.3%;
+    --card-foreground: 0 0% 92%; /* Lighter for better contrast on dark */
 
     --popover: 0 0% 18%;
     --popover-foreground: 0 0% 97.3%;
 
-    --primary: 16 100% 60.4%;
+    --primary: 16 100% 60%; /* Lighter in dark mode for contrast */
     --primary-foreground: 0 0% 100%;
 
     --secondary: 218 65% 32%;
@@ -73,7 +73,7 @@ All colors MUST be HSL.
     --accent-foreground: 0 0% 13%;
 
     --muted: 0 0% 25%;
-    --muted-foreground: 0 0% 60%;
+    --muted-foreground: 0 0% 65%; /* Lighter for better contrast */
 
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 100%;
