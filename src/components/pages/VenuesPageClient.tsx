@@ -73,10 +73,12 @@ const VenueCard = memo(({ venue, primaryPhoto }: { venue: VenueWithPhotos; prima
       <Card className="overflow-hidden hover:shadow-xl transition-all cursor-pointer h-full">
         <div className="h-40 sm:h-48 bg-secondary/10 relative">
           {primaryPhoto && !imageError ? (
-            <img 
+            <Image 
               src={primaryPhoto} 
               alt={venue.name}
-              className="w-full h-full object-cover"
+              fill
+              className="object-cover"
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
               loading="lazy"
               onError={() => setImageError(true)}
             />
@@ -86,7 +88,7 @@ const VenueCard = memo(({ venue, primaryPhoto }: { venue: VenueWithPhotos; prima
             </div>
           )}
           {Number(venue.calculated_rating) > 0 ? (
-            <div className="absolute top-2 right-2 sm:top-4 sm:right-4 bg-white/95 backdrop-blur-sm text-gray-900 px-2 py-1 sm:px-3 rounded-full text-xs sm:text-sm font-semibold flex items-center gap-1 shadow-lg">
+            <div className="absolute top-2 right-2 sm:top-4 sm:right-4 bg-white/95 backdrop-blur-sm text-gray-900 px-2 py-1 sm:px-3 rounded-full text-xs sm:text-sm font-semibold flex items-center gap-1 shadow-lg z-10">
               <Star className="w-3 h-3 sm:w-4 sm:h-4 fill-yellow-400 text-yellow-400" />
               {venue.calculated_rating!.toFixed(1)}
               <span className="text-xs text-gray-600">({venue.review_count})</span>

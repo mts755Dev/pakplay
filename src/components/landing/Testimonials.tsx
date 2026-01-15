@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { Card } from "@/components/ui/card";
 import { Star, Quote } from "lucide-react";
 
@@ -89,14 +90,17 @@ export const Testimonials = () => {
 
                 {/* Author */}
                 <div className="flex items-center gap-4">
-                  <img 
-                    src={testimonial.image} 
-                    alt={testimonial.name}
-                    className="w-12 h-12 rounded-full bg-muted object-cover"
-                    onError={(e) => {
-                      e.currentTarget.src = 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + testimonial.name;
-                    }}
-                  />
+                  <div className="relative w-12 h-12 flex-shrink-0">
+                    <Image 
+                      src={testimonial.image} 
+                      alt={testimonial.name}
+                      width={48}
+                      height={48}
+                      className="rounded-full bg-muted object-cover"
+                      sizes="48px"
+                      loading="lazy"
+                    />
+                  </div>
                   <div>
                     <div className="font-bold text-foreground">{testimonial.name}</div>
                     <div className="text-sm text-muted-foreground">
@@ -145,14 +149,17 @@ export const Testimonials = () => {
 
                 {/* Author */}
                 <div className="flex items-center gap-4">
-                  <img 
-                    src={testimonial.image} 
-                    alt={testimonial.name}
-                    className="w-12 h-12 rounded-full bg-muted object-cover"
-                    onError={(e) => {
-                      e.currentTarget.src = 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + testimonial.name;
-                    }}
-                  />
+                  <div className="relative w-12 h-12 flex-shrink-0">
+                    <Image 
+                      src={testimonial.image} 
+                      alt={testimonial.name}
+                      width={48}
+                      height={48}
+                      className="rounded-full bg-muted object-cover"
+                      sizes="48px"
+                      loading="lazy"
+                    />
+                  </div>
                   <div>
                     <div className="font-bold text-foreground">{testimonial.name}</div>
                     <div className="text-sm text-muted-foreground">

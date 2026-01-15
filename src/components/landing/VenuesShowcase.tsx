@@ -144,10 +144,13 @@ export const VenuesShowcase = ({ initialVenues = [] }: VenuesShowcaseProps) => {
                     <Card className="overflow-hidden hover:shadow-xl transition-all cursor-pointer h-full">
                       <div className="h-48 bg-secondary/10 relative">
                         {primaryPhoto ? (
-                          <img 
+                          <Image 
                             src={primaryPhoto} 
                             alt={venue.name}
-                            className="w-full h-full object-cover"
+                            fill
+                            className="object-cover"
+                            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                            loading="lazy"
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-muted-foreground">
@@ -155,7 +158,7 @@ export const VenuesShowcase = ({ initialVenues = [] }: VenuesShowcaseProps) => {
                           </div>
                         )}
                         {Number(venue.calculated_rating) > 0 ? (
-                          <div className="absolute top-4 right-4 bg-white/95 backdrop-blur-sm text-gray-900 px-3 py-1 rounded-full text-sm font-semibold flex items-center gap-1 shadow-lg">
+                          <div className="absolute top-4 right-4 bg-white/95 backdrop-blur-sm text-gray-900 px-3 py-1 rounded-full text-sm font-semibold flex items-center gap-1 shadow-lg z-10">
                             <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
                             {venue.calculated_rating.toFixed(1)}
                             <span className="text-xs text-gray-600">({venue.review_count})</span>

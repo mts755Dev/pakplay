@@ -79,6 +79,14 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        {/* Preconnect to critical third-party origins */}
+        <link rel="preconnect" href="https://gyofcafqzukjyxourkpn.supabase.co" />
+        <link rel="dns-prefetch" href="https://gyofcafqzukjyxourkpn.supabase.co" />
+        <link rel="preconnect" href="https://lh3.googleusercontent.com" />
+        <link rel="dns-prefetch" href="https://lh3.googleusercontent.com" />
+        <link rel="preconnect" href="https://pagead2.googlesyndication.com" />
+        <link rel="dns-prefetch" href="https://pagead2.googlesyndication.com" />
+        
         {/* Favicon */}
         <link rel="icon" href="/favicon.png" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
