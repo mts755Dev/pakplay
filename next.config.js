@@ -127,7 +127,6 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: '2mb',
     },
-    optimizeCss: true, // Enable CSS optimization
   },
 
   // Transpile packages that need it
