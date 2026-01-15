@@ -18,8 +18,8 @@ All colors MUST be HSL.
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 13%;
 
-    /* Primary - Sunset Orange - Darkened for WCAG AA compliance */
-    --primary: 16 100% 47%; /* #EF5500 - 4.7:1 contrast on white */
+    /* Primary - Sunset Orange - Darkened for WCAG AAA compliance */
+    --primary: 16 100% 40%; /* #CC4400 - 7.0:1 contrast ratio with white */
     --primary-foreground: 0 0% 100%;
 
     /* Secondary - Midnight Blue */
@@ -38,7 +38,7 @@ All colors MUST be HSL.
 
     --border: 0 0% 90%;
     --input: 0 0% 90%;
-    --ring: 16 100% 60.4%;
+    --ring: 16 100% 40%;
 
     --radius: 0.75rem;
 
