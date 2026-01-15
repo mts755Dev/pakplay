@@ -27,25 +27,28 @@ export const Footer = () => {
                 href="https://facebook.com/pakplay" 
                 target="_blank" 
                 rel="noopener noreferrer"
+                aria-label="Visit our Facebook page"
                 className="w-10 h-10 rounded-full bg-primary/10 hover:bg-primary/20 text-primary flex items-center justify-center transition-colors"
               >
-                <Facebook className="w-5 h-5" />
+                <Facebook className="w-5 h-5" aria-hidden="true" />
               </a>
               <a 
                 href="https://instagram.com/pakplay" 
                 target="_blank" 
                 rel="noopener noreferrer"
+                aria-label="Visit our Instagram page"
                 className="w-10 h-10 rounded-full bg-primary/10 hover:bg-primary/20 text-primary flex items-center justify-center transition-colors"
               >
-                <Instagram className="w-5 h-5" />
+                <Instagram className="w-5 h-5" aria-hidden="true" />
               </a>
               <a 
                 href="https://twitter.com/pakplay" 
                 target="_blank" 
                 rel="noopener noreferrer"
+                aria-label="Visit our Twitter page"
                 className="w-10 h-10 rounded-full bg-primary/10 hover:bg-primary/20 text-primary flex items-center justify-center transition-colors"
               >
-                <Twitter className="w-5 h-5" />
+                <Twitter className="w-5 h-5" aria-hidden="true" />
               </a>
             </div>
           </div>
@@ -58,7 +61,7 @@ export const Footer = () => {
           <div className="py-12 grid md:grid-cols-2 lg:grid-cols-4 gap-12">
             {/* Players Column */}
             <div>
-              <h4 className="font-bold mb-6 text-lg">For Players</h4>
+              <h2 className="font-bold mb-6 text-lg">For Players</h2>
               <ul className="space-y-3 text-secondary-foreground/80">
                 <li>
                   <Link href="/venues" className="hover:text-secondary-foreground transition-colors">
@@ -75,7 +78,7 @@ export const Footer = () => {
 
             {/* Owners Column */}
             <div>
-              <h4 className="font-bold mb-6 text-lg">For Owners</h4>
+              <h2 className="font-bold mb-6 text-lg">For Owners</h2>
               <ul className="space-y-3 text-secondary-foreground/80">
                 <li>
                   <Link href="/signup" className="hover:text-secondary-foreground transition-colors">
@@ -97,7 +100,7 @@ export const Footer = () => {
 
             {/* Company Column */}
             <div>
-              <h4 className="font-bold mb-6 text-lg">Company</h4>
+              <h2 className="font-bold mb-6 text-lg">Company</h2>
               <ul className="space-y-3 text-secondary-foreground/80">
                 <li>
                   <Link href="/about" className="hover:text-secondary-foreground transition-colors">
@@ -119,7 +122,7 @@ export const Footer = () => {
 
             {/* Contact Us Column */}
             <div>
-              <h4 className="font-bold mb-6 text-lg">Contact Us</h4>
+              <h2 className="font-bold mb-6 text-lg">Contact Us</h2>
               <ul className="space-y-3 text-secondary-foreground/80">
                 <li className="flex items-center gap-2">
                   <Mail className="w-4 h-4" />

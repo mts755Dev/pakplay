@@ -99,7 +99,7 @@ export const HeroSection = ({ initialStats }: HeroSectionProps) => {
                     setSelectedProvince(value);
                     setSelectedCity("");
                   }}>
-                    <SelectTrigger className="bg-white text-gray-900">
+                    <SelectTrigger className="bg-white text-gray-900" aria-label="Select Province">
                       <SelectValue placeholder="Select Province" />
                     </SelectTrigger>
                     <SelectContent className="bg-white text-gray-900">
@@ -114,7 +114,7 @@ export const HeroSection = ({ initialStats }: HeroSectionProps) => {
                 <div>
                   <label className="text-sm font-medium mb-2 block">City</label>
                   <Select value={selectedCity} onValueChange={setSelectedCity} disabled={!selectedProvince}>
-                    <SelectTrigger className="bg-white text-gray-900">
+                    <SelectTrigger className="bg-white text-gray-900" aria-label="Select City">
                       <SelectValue placeholder="Select City" />
                     </SelectTrigger>
                     <SelectContent className="bg-white text-gray-900">
