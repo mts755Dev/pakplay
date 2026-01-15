@@ -10,6 +10,16 @@ export async function middleware(request: NextRequest) {
     // Create response
     const response = NextResponse.next();
     
+    // Add Early Hints for critical resources
+    response.headers.set(
+      'Link',
+      '<https://gyofcafqzukjyxourkpn.supabase.co>; rel=preconnect; crossorigin, ' +
+      '<https://pagead2.googlesyndication.com>; rel=preconnect; crossorigin'
+    );
+    
+    // Enable DNS prefetch
+    response.headers.set('X-DNS-Prefetch-Control', 'on');
+    
     // Check environment variables
     const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

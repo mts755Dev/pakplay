@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Facebook, Instagram, Twitter, Mail, Phone } from "lucide-react";
 import ppLogo from "@/assets/pp logo.png";
+import Image from "next/image";
 
 export const Footer = () => {
   return (
@@ -12,7 +13,7 @@ export const Footer = () => {
         <div className="container mx-auto px-4 py-12">
           <div className="max-w-2xl">
             <Link href="/" className="inline-block mb-4">
-              <img src={ppLogo.src} alt="PakPlay" className="h-16 w-auto" />
+              <Image src={ppLogo} alt="PakPlay" height={64} width={128} className="h-16 w-auto" />
             </Link>
             <p className="text-gray-900 font-medium mb-2 text-lg">
               Where Pakistan Plays

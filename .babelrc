@@ -1,0 +1,24 @@
+{
+  "presets": [
+    [
+      "next/babel",
+      {
+        "preset-env": {
+          "targets": {
+            "chrome": "90",
+            "edge": "90",
+            "firefox": "88",
+            "safari": "14",
+            "ios": "14"
+          },
+          "bugfixes": true,
+          "modules": false,
+          "useBuiltIns": false,
+          "exclude": [
+            "transform-typeof-symbol"
+          ]
+        }
+      }
+    ]
+  ]
+}

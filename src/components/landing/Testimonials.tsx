@@ -2,6 +2,7 @@
 
 import { Card } from "@/components/ui/card";
 import { Star, Quote } from "lucide-react";
+import Image from "next/image";
 
 const testimonials = [
   {
@@ -145,13 +146,13 @@ export const Testimonials = () => {
 
                 {/* Author */}
                 <div className="flex items-center gap-4">
-                  <img 
+                  <Image 
                     src={testimonial.image} 
                     alt={testimonial.name}
+                    width={48}
+                    height={48}
                     className="w-12 h-12 rounded-full bg-muted object-cover"
-                    onError={(e) => {
-                      e.currentTarget.src = 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + testimonial.name;
-                    }}
+                    quality={85}
                   />
                   <div>
                     <div className="font-bold text-foreground">{testimonial.name}</div>

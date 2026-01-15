@@ -79,6 +79,14 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        {/* DNS Prefetch & Preconnect for critical origins */}
+        <link rel="dns-prefetch" href="https://gyofcafqzukjyxourkpn.supabase.co" />
+        <link rel="dns-prefetch" href="https://pagead2.googlesyndication.com" />
+        <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
+        
+        <link rel="preconnect" href="https://gyofcafqzukjyxourkpn.supabase.co" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://pagead2.googlesyndication.com" crossOrigin="anonymous" />
+        
         {/* Favicon */}
         <link rel="icon" href="/favicon.png" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
@@ -91,12 +99,26 @@ export default function RootLayout({
         />
       </head>
       <body className="font-sans antialiased">
-        {/* Google AdSense */}
+        {/* Service Worker Registration */}
         <Script
-          async
+          id="register-sw"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                  navigator.serviceWorker.register('/sw.js').catch(() => {});
+                });
+              }
+            `,
+          }}
+        />
+        
+        {/* Google AdSense - Load after page interactive */}
+        <Script
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6304905603815784"
           crossOrigin="anonymous"
-          strategy="afterInteractive"
+          strategy="lazyOnload"
         />
         
         <Providers>
