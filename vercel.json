@@ -1,12 +1,17 @@
 {
   "framework": "nextjs",
+  "regions": ["iad1"],
   "headers": [
     {
       "source": "/",
       "headers": [
         {
           "key": "Link",
-          "value": "<https://gyofcafqzukjyxourkpn.supabase.co>; rel=preconnect; crossorigin, <https://pagead2.googlesyndication.com>; rel=preconnect; crossorigin"
+          "value": "<https://gyofcafqzukjyxourkpn.supabase.co>; rel=preconnect; crossorigin, <https://lh3.googleusercontent.com>; rel=preconnect; crossorigin, <https://pagead2.googlesyndication.com>; rel=preconnect; crossorigin"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, s-maxage=60, stale-while-revalidate=300"
         }
       ]
     },
@@ -16,6 +21,14 @@
         {
           "key": "X-DNS-Prefetch-Control",
           "value": "on"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "SAMEORIGIN"
         }
       ]
     },
@@ -29,6 +42,10 @@
         {
           "key": "Content-Type",
           "value": "text/css; charset=utf-8"
+        },
+        {
+          "key": "Link",
+          "value": "</fonts>; rel=preconnect; crossorigin"
         }
       ]
     },
@@ -64,5 +81,12 @@
       ]
     }
   ],
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/$1"
+    }
+  ],
+  "redirects": [],
   "crons": []
 }

@@ -197,6 +197,8 @@ export const HeroSection = ({ initialStats }: HeroSectionProps) => {
                 alt="Professional sports venue facility" 
                 className="rounded-2xl shadow-2xl w-full h-auto transform hover:scale-105 transition-transform duration-300"
                 priority
+                quality={75}
+                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 650px"
               />
               {/* Floating Cards */}
               <div className="absolute -bottom-6 -left-6 bg-white rounded-xl shadow-xl p-4 max-w-xs hidden lg:block">

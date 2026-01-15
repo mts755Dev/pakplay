@@ -69,9 +69,9 @@ function useDebounce<T>(value: T, delay: number): T {
 const VenueCard = memo(({ venue, primaryPhoto }: { venue: VenueWithPhotos; primaryPhoto: string | undefined }) => {
   const [imageError, setImageError] = useState(false);
   
-  // Optimize Supabase images with transformation and cache parameters
+  // Optimize Supabase images with aggressive transformation
   const optimizedPhoto = primaryPhoto && primaryPhoto.includes('supabase.co/storage')
-    ? `${primaryPhoto}?width=500&height=300&quality=75&format=webp`
+    ? `${primaryPhoto}?width=450&height=250&quality=70&format=webp`
     : primaryPhoto;
   
   return (

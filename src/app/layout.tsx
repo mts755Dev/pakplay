@@ -5,6 +5,8 @@ import { Providers } from "@/components/providers";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { ScrollToTop } from "@/components/ScrollToTop";
+import { ResourceHints } from "./resource-hints";
+import { PriorityHints } from "./priority-hints";
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -79,13 +81,19 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* DNS Prefetch & Preconnect for critical origins */}
-        <link rel="dns-prefetch" href="https://gyofcafqzukjyxourkpn.supabase.co" />
-        <link rel="dns-prefetch" href="https://pagead2.googlesyndication.com" />
-        <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
+        {/* Inline Critical CSS for immediate rendering */}
+        <style dangerouslySetInnerHTML={{ __html: `
+          *,::before,::after{box-sizing:border-box;border:0 solid #e5e7eb}
+          html{line-height:1.5;-webkit-text-size-adjust:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+          body{margin:0;line-height:inherit;background-color:hsl(0 0% 97.3%);color:hsl(0 0% 13%);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+          img{max-width:100%;height:auto}button{font:inherit;cursor:pointer}a{color:inherit;text-decoration:inherit}
+        ` }} />
         
-        <link rel="preconnect" href="https://gyofcafqzukjyxourkpn.supabase.co" crossOrigin="anonymous" />
-        <link rel="preconnect" href="https://pagead2.googlesyndication.com" crossOrigin="anonymous" />
+        {/* Resource Hints - DNS Prefetch & Preconnect */}
+        <ResourceHints />
+        
+        {/* Priority Hints - Preload critical resources */}
+        <PriorityHints />
         
         {/* Favicon */}
         <link rel="icon" href="/favicon.png" />

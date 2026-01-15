@@ -10,10 +10,11 @@ export async function middleware(request: NextRequest) {
     // Create response
     const response = NextResponse.next();
     
-    // Add Early Hints for critical resources
+    // Add Early Hints for critical resources (HTTP 103 Early Hints)
     response.headers.set(
       'Link',
       '<https://gyofcafqzukjyxourkpn.supabase.co>; rel=preconnect; crossorigin, ' +
+      '<https://lh3.googleusercontent.com>; rel=preconnect; crossorigin, ' +
       '<https://pagead2.googlesyndication.com>; rel=preconnect; crossorigin'
     );
     
@@ -116,4 +117,3 @@ export const config = {
     '/venue/:path*',
   ],
 };
-

@@ -35,7 +35,7 @@ const nextConfig = {
       },
     ],
     formats: ['image/avif', 'image/webp'],
-    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
     minimumCacheTTL: 31536000, // Cache images for 1 year
     dangerouslyAllowSVG: true,
@@ -44,10 +44,18 @@ const nextConfig = {
     // Aggressive caching for external images
     loader: 'default',
     unoptimized: false,
+    // Reduce quality for better performance
+    quality: 75,
   },
 
-  // Compression
+  // Compression - always enabled
   compress: true,
+  
+  // Generate ETags for caching
+  generateEtags: true,
+  
+  // Disable x-powered-by header
+  poweredByHeader: false,
 
   // Security headers and resource hints
   async headers() {
@@ -73,7 +81,7 @@ const nextConfig = {
           },
           {
             key: 'Link',
-            value: '<https://gyofcafqzukjyxourkpn.supabase.co>; rel=preconnect; crossorigin, <https://pagead2.googlesyndication.com>; rel=preconnect; crossorigin'
+            value: '<https://gyofcafqzukjyxourkpn.supabase.co>; rel=preconnect; crossorigin, <https://lh3.googleusercontent.com>; rel=preconnect; crossorigin, <https://pagead2.googlesyndication.com>; rel=preconnect; crossorigin'
           },
         ],
       },
@@ -127,6 +135,8 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: '2mb',
     },
+    // Inline CSS for critical path
+    inlineCss: true,
   },
 
   // Transpile packages that need it
@@ -146,10 +156,9 @@ const nextConfig = {
     removeConsole: process.env.NODE_ENV === 'production' ? {
       exclude: ['error', 'warn'],
     } : false,
+    // Remove React properties for smaller bundle
+    reactRemoveProperties: true,
   },
-  
-  // SWC minify options for modern browsers
-  swcMinify: true,
   
   // Target modern browsers - no legacy polyfills
   env: {

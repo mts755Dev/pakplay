@@ -139,9 +139,9 @@ export const VenuesShowcase = ({ initialVenues = [] }: VenuesShowcaseProps) => {
                 const primaryPhoto = venue.venue_photos?.find((p: any) => p.is_primary)?.photo_url 
                   || venue.venue_photos?.[0]?.photo_url;
                 
-                // Optimize Supabase images with transformation and cache parameters
+                // Optimize Supabase images with aggressive transformation
                 const optimizedPhoto = primaryPhoto && primaryPhoto.includes('supabase.co/storage')
-                  ? `${primaryPhoto}?width=500&height=300&quality=75&format=webp`
+                  ? `${primaryPhoto}?width=450&height=250&quality=70&format=webp`
                   : primaryPhoto;
                 
                 return (
