@@ -122,18 +122,14 @@ export function AdminVenuesClient({ initialVenues }: AdminVenuesClientProps = {}
         }
 
         setUser(user);
-        isInitialized.current = true;
         
-        if (!initialVenues) {
-          // Fetch stats and initial venues in parallel
-          await Promise.all([
-            fetchStats(),
-            fetchVenues(0, true)
-          ]);
-        } else {
-          // Just fetch stats if venues already provided
-          await fetchStats();
-        }
+        // Always fetch stats and initial venues
+        await Promise.all([
+          fetchStats(),
+          fetchVenues(0, true)
+        ]);
+        
+        isInitialized.current = true;
       } else {
         window.location.href = '/admin';
       }

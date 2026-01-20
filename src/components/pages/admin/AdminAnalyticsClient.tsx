@@ -171,8 +171,8 @@ export function AdminAnalyticsClient({ initialData }: AdminAnalyticsClientProps 
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm text-muted-foreground">Total Venues</p>
-                        <h3 className="text-3xl font-bold mt-2">{analytics.totalVenues}</h3>
-                        <p className="text-xs text-green-500 mt-1">+{analytics.growthStats.venuesThisMonth} this month</p>
+                        <h3 className="text-3xl font-bold mt-2">{analytics.totalVenues || 0}</h3>
+                        <p className="text-xs text-green-500 mt-1">+{analytics.growthStats?.venuesThisMonth || 0} this month</p>
                       </div>
                       <Building2 className="w-8 h-8 text-primary" />
                     </div>
@@ -181,8 +181,8 @@ export function AdminAnalyticsClient({ initialData }: AdminAnalyticsClientProps 
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm text-muted-foreground">Total Users</p>
-                        <h3 className="text-3xl font-bold mt-2">{analytics.totalUsers}</h3>
-                        <p className="text-xs text-green-500 mt-1">+{analytics.growthStats.usersThisMonth} this month</p>
+                        <h3 className="text-3xl font-bold mt-2">{analytics.totalUsers || 0}</h3>
+                        <p className="text-xs text-green-500 mt-1">+{analytics.growthStats?.usersThisMonth || 0} this month</p>
                       </div>
                       <Users className="w-8 h-8 text-primary" />
                     </div>
@@ -191,8 +191,8 @@ export function AdminAnalyticsClient({ initialData }: AdminAnalyticsClientProps 
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm text-muted-foreground">Total Bookings</p>
-                        <h3 className="text-3xl font-bold mt-2">{analytics.totalBookings}</h3>
-                        <p className="text-xs text-green-500 mt-1">+{analytics.growthStats.bookingsThisMonth} this month</p>
+                        <h3 className="text-3xl font-bold mt-2">{analytics.totalBookings || 0}</h3>
+                        <p className="text-xs text-green-500 mt-1">+{analytics.growthStats?.bookingsThisMonth || 0} this month</p>
                       </div>
                       <Calendar className="w-8 h-8 text-primary" />
                     </div>
@@ -201,8 +201,8 @@ export function AdminAnalyticsClient({ initialData }: AdminAnalyticsClientProps 
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm text-muted-foreground">Total Revenue</p>
-                        <h3 className="text-2xl font-bold mt-2">PKR {analytics.totalRevenue.toLocaleString()}</h3>
-                        <p className="text-xs text-green-500 mt-1">+PKR {analytics.growthStats.revenueThisMonth.toLocaleString()} this month</p>
+                        <h3 className="text-2xl font-bold mt-2">PKR {(analytics.totalRevenue || 0).toLocaleString()}</h3>
+                        <p className="text-xs text-green-500 mt-1">+PKR {(analytics.growthStats?.revenueThisMonth || 0).toLocaleString()} this month</p>
                       </div>
                       <DollarSign className="w-8 h-8 text-primary" />
                     </div>
@@ -214,7 +214,7 @@ export function AdminAnalyticsClient({ initialData }: AdminAnalyticsClientProps 
               <div className="mb-8">
                 <h2 className="text-xl font-bold mb-4">Venues by Sport</h2>
                 <Card className="p-6">
-                  {analytics.venuesBySport.length === 0 ? (
+                  {!analytics.venuesBySport || analytics.venuesBySport.length === 0 ? (
                     <p className="text-muted-foreground text-center py-8">No data available</p>
                   ) : (
                     <div className="space-y-4">
@@ -246,7 +246,7 @@ export function AdminAnalyticsClient({ initialData }: AdminAnalyticsClientProps 
               <div className="mb-8">
                 <h2 className="text-xl font-bold mb-4">Venues by City</h2>
                 <Card className="p-6">
-                  {analytics.venuesByCity.length === 0 ? (
+                  {!analytics.venuesByCity || analytics.venuesByCity.length === 0 ? (
                     <p className="text-muted-foreground text-center py-8">No data available</p>
                   ) : (
                     <div className="space-y-4">
