@@ -13,8 +13,9 @@ import { Footer } from "@/components/landing/Footer";
 import { BannerAd, InFeedAd } from "@/components/ads/AdSenseUnit";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Menu } from "lucide-react";
+import { Menu, LogOut } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { toast } from "sonner";
 import ppLogo from "@/assets/pp logo.png";
 
 interface IndexPageProps {
@@ -28,14 +29,16 @@ export function IndexPage({ initialFeaturedVenues = [], initialStats, initialSpo
   const [userRole, setUserRole] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
     setMounted(true);
     
-    // Load from cache immediately after mount
+    // Load from cache immediately after mount and set authChecked if we have cached data
     const cachedRole = localStorage.getItem('user_role');
     if (cachedRole) {
       setUserRole(cachedRole);
+      setAuthChecked(true); // We have cached data, show UI immediately
     }
     
     checkUser();
@@ -62,7 +65,6 @@ export function IndexPage({ initialFeaturedVenues = [], initialStats, initialSpo
           localStorage.removeItem('user_role');
         }
       } catch (error) {
-        // Handle auth state change errors during logout/navigation
         console.error('Auth state change error:', error);
       }
     });
@@ -74,11 +76,14 @@ export function IndexPage({ initialFeaturedVenues = [], initialStats, initialSpo
 
   const checkUser = async () => {
     try {
+      // Get session (this uses cached session, very fast)
       const { data: { session } } = await supabase.auth.getSession();
+      
       if (session?.user) {
         setUser(session.user);
+        setAuthChecked(true); // Set immediately after getting session
         
-        // Fetch fresh role from database
+        // Fetch fresh role from database in background
         const { data: profile } = await supabase
           .from('profiles')
           .select('role')
@@ -90,10 +95,27 @@ export function IndexPage({ initialFeaturedVenues = [], initialStats, initialSpo
           localStorage.setItem('user_role', profile.role);
         }
       } else {
+        setUser(null);
+        setUserRole(null);
         localStorage.removeItem('user_role');
+        setAuthChecked(true);
       }
     } catch (error) {
       // Silent fail
+      setAuthChecked(true);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut();
+      setUser(null);
+      setUserRole(null);
+      localStorage.removeItem('user_role');
+      toast.success("Signed out successfully");
+      setMobileMenuOpen(false);
+    } catch (error) {
+      console.error('Sign out error:', error);
     }
   };
 
@@ -108,6 +130,10 @@ export function IndexPage({ initialFeaturedVenues = [], initialStats, initialSpo
     if (userRole === 'venue_owner') return 'Dashboard';
     return 'Sign In';
   };
+
+  const isLoggedIn = !!user;
+  const isPlayer = userRole === 'player';
+  const isOwner = userRole === 'venue_owner';
 
   return (
     <div className="min-h-screen">
@@ -135,13 +161,47 @@ export function IndexPage({ initialFeaturedVenues = [], initialStats, initialSpo
             <Link href="/contact">
               <Button variant="ghost" size="sm">Contact Us</Button>
             </Link>
-            <Link href="/signup">
-              <Button variant="outline" size="sm">List Your Venue</Button>
-            </Link>
-            {mounted && (
-              <Link href={getDashboardLink()}>
-                <Button size="sm" suppressHydrationWarning>{getDashboardLabel()}</Button>
-              </Link>
+
+            {mounted && authChecked && (
+              <>
+                {/* Show "List Your Venue" only when NOT logged in as player */}
+                {!isPlayer && !isLoggedIn && (
+                  <Link href="/signup">
+                    <Button variant="outline" size="sm">Sign Up</Button>
+                  </Link>
+                )}
+
+                {isLoggedIn ? (
+                  <>
+                    {/* My Bookings button for players */}
+                    {isPlayer && (
+                      <Link href="/user/bookings">
+                        <Button variant="outline" size="sm">My Bookings</Button>
+                      </Link>
+                    )}
+                    {/* Dashboard button for owners */}
+                    {isOwner && (
+                      <Link href="/owner/dashboard">
+                        <Button size="sm">Dashboard</Button>
+                      </Link>
+                    )}
+                    {/* Sign Out button */}
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={handleSignOut}
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      <LogOut className="w-4 h-4 mr-1" />
+                      Sign Out
+                    </Button>
+                  </>
+                ) : (
+                  <Link href={getDashboardLink()}>
+                    <Button size="sm" suppressHydrationWarning>{getDashboardLabel()}</Button>
+                  </Link>
+                )}
+              </>
             )}
           </div>
 
@@ -180,17 +240,50 @@ export function IndexPage({ initialFeaturedVenues = [], initialStats, initialSpo
                   </Button>
                 </Link>
                 <div className="border-t pt-4 mt-4">
-                  <Link href="/signup" onClick={() => setMobileMenuOpen(false)}>
-                    <Button variant="outline" className="w-full mb-3 text-lg">
-                      List Your Venue
-                    </Button>
-                  </Link>
-                  {mounted && (
-                    <Link href={getDashboardLink()} onClick={() => setMobileMenuOpen(false)}>
-                      <Button className="w-full text-lg" suppressHydrationWarning>
-                        {getDashboardLabel()}
-                      </Button>
-                    </Link>
+                  {mounted && authChecked && (
+                    <>
+                      {/* Show "List Your Venue" only when NOT logged in as player */}
+                      {!isPlayer && !isLoggedIn && (
+                        <Link href="/signup" onClick={() => setMobileMenuOpen(false)}>
+                          <Button variant="outline" className="w-full mb-3 text-lg">
+                            Sign Up
+                          </Button>
+                        </Link>
+                      )}
+
+                      {isLoggedIn ? (
+                        <>
+                          {isPlayer && (
+                            <Link href="/user/bookings" onClick={() => setMobileMenuOpen(false)}>
+                              <Button variant="outline" className="w-full mb-3 text-lg">
+                                My Bookings
+                              </Button>
+                            </Link>
+                          )}
+                          {isOwner && (
+                            <Link href="/owner/dashboard" onClick={() => setMobileMenuOpen(false)}>
+                              <Button className="w-full mb-3 text-lg">
+                                Dashboard
+                              </Button>
+                            </Link>
+                          )}
+                          <Button 
+                            variant="ghost" 
+                            className="w-full text-lg text-muted-foreground hover:text-destructive"
+                            onClick={handleSignOut}
+                          >
+                            <LogOut className="w-5 h-5 mr-2" />
+                            Sign Out
+                          </Button>
+                        </>
+                      ) : (
+                        <Link href={getDashboardLink()} onClick={() => setMobileMenuOpen(false)}>
+                          <Button className="w-full text-lg" suppressHydrationWarning>
+                            {getDashboardLabel()}
+                          </Button>
+                        </Link>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -199,7 +292,7 @@ export function IndexPage({ initialFeaturedVenues = [], initialStats, initialSpo
         </div>
       </nav>
 
-      <HeroSection initialStats={initialStats} />
+      <HeroSection initialStats={initialStats} userRole={userRole} />
       
       {/* Ad after Hero Section */}
       <div className="container mx-auto px-4 my-8">
@@ -223,9 +316,8 @@ export function IndexPage({ initialFeaturedVenues = [], initialStats, initialSpo
         <InFeedAd />
       </div>
       
-      <CTASection />
+      <CTASection userRole={userRole} />
       <Footer />
     </div>
   );
 }
-

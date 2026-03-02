@@ -150,7 +150,7 @@ export async function fetchInitialVenues(limit: number = 12) {
       .select(`
         id, name, slug, address, city, province, area, sub_area,
         sport_type, price_per_hour, opening_time, closing_time, is_24_7, created_at,
-        owner_id, description, amenities, whatsapp_number, google_maps_url, subdomain, is_featured,
+        owner_id, description, amenities, whatsapp_number, google_maps_url, is_featured,
         status, featured, rating, total_bookings, updated_at,
         logo_url, tagline, facebook_url, instagram_url
       `, { count: 'exact' })
@@ -158,7 +158,11 @@ export async function fetchInitialVenues(limit: number = 12) {
       .order('created_at', { ascending: false })
       .range(0, limit - 1);
 
-    if (error || !venues) {
+    if (error) {
+      return { venues: [], totalCount: 0 };
+    }
+
+    if (!venues || venues.length === 0) {
       return { venues: [], totalCount: 0 };
     }
 
@@ -247,7 +251,7 @@ export async function fetchInitialOffers(limit: number = 12) {
         venues!inner(
           id, owner_id, name, slug, sport_type, city, province, area, sub_area,
           address, description, amenities, price_per_hour, opening_time, closing_time,
-          is_24_7, whatsapp_number, google_maps_url, subdomain, is_featured, status,
+          is_24_7, whatsapp_number, google_maps_url, is_featured, status,
           featured, rating, total_bookings, logo_url, tagline, facebook_url,
           instagram_url, created_at, updated_at
         )
@@ -713,3 +717,154 @@ export async function fetchAdminAnalytics() {
   }
 }
 
+// ==================== LOYALTY SYSTEM ====================
+
+export interface LoyaltyTier {
+  id?: string;
+  venue_id: string;
+  tier_name: string;
+  min_bookings: number;
+  discount_percent: number;
+}
+
+/**
+ * Fetch loyalty tiers for a venue
+ */
+export async function fetchVenueLoyaltyTiers(venueId: string): Promise<LoyaltyTier[]> {
+  try {
+    const { data, error } = await supabaseServer
+      .from('venue_loyalty_tiers')
+      .select('*')
+      .eq('venue_id', venueId)
+      .order('min_bookings', { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Error fetching loyalty tiers:', error);
+    return [];
+  }
+}
+
+/**
+ * Get user's completed booking count at a specific venue
+ * and determine their applicable loyalty tier + discount
+ */
+export async function fetchUserLoyaltyStatus(
+  venueId: string,
+  playerEmail: string
+): Promise<{ completedBookings: number; currentTier: LoyaltyTier | null; nextTier: LoyaltyTier | null }> {
+  try {
+    // Fetch confirmed + completed bookings for this user at this venue
+    const { data: bookingsData, error: countError } = await supabaseServer
+      .from('bookings')
+      .select('status, booking_date, end_time')
+      .eq('venue_id', venueId)
+      .eq('player_email', playerEmail)
+      .in('status', ['completed', 'confirmed']);
+
+    if (countError) throw countError;
+
+    // Count bookings that are effectively completed:
+    // - status is 'completed' in DB, OR
+    // - status is 'confirmed' AND end time has passed
+    const now = new Date();
+    const completedBookings = (bookingsData || []).filter((b) => {
+      if (b.status === 'completed') return true;
+      if (b.status === 'confirmed') {
+        try {
+          const bookingEndDateTime = new Date(`${b.booking_date}T${b.end_time}`);
+          return bookingEndDateTime < now;
+        } catch {
+          return false;
+        }
+      }
+      return false;
+    }).length;
+
+    // Fetch loyalty tiers for this venue
+    const tiers = await fetchVenueLoyaltyTiers(venueId);
+
+    if (tiers.length === 0) {
+      return { completedBookings, currentTier: null, nextTier: null };
+    }
+
+    // Find the highest applicable tier (where user's bookings >= min_bookings)
+    let currentTier: LoyaltyTier | null = null;
+    let nextTier: LoyaltyTier | null = null;
+
+    for (const tier of tiers) {
+      if (completedBookings >= tier.min_bookings) {
+        currentTier = tier;
+      } else if (!nextTier) {
+        nextTier = tier;
+      }
+    }
+
+    return { completedBookings, currentTier, nextTier };
+  } catch (error) {
+    console.error('Error fetching user loyalty status:', error);
+    return { completedBookings: 0, currentTier: null, nextTier: null };
+  }
+}/**
+ * Save loyalty tiers for a venue (owner action)
+ * Deletes existing tiers and inserts new ones
+ */
+export async function saveVenueLoyaltyTiers(
+  venueId: string,
+  tiers: Array<{ tier_name: string; min_bookings: number; discount_percent: number }>
+) {
+  try {
+    // Get authenticated user's supabase client
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll();
+          },
+          setAll(cookiesToSet) {
+            try {
+              cookiesToSet.forEach(({ name, value, options }) =>
+                cookieStore.set(name, value, options)
+              );
+            } catch {
+              // Ignore errors in Server Components
+            }
+          },
+        },
+      }
+    );
+
+    // Delete existing tiers for this venue
+    const { error: deleteError } = await supabase
+      .from('venue_loyalty_tiers')
+      .delete()
+      .eq('venue_id', venueId);
+
+    if (deleteError) throw deleteError;
+
+    // Insert new tiers (if any)
+    if (tiers.length > 0) {
+      const tierInserts = tiers.map(tier => ({
+        venue_id: venueId,
+        tier_name: tier.tier_name,
+        min_bookings: tier.min_bookings,
+        discount_percent: tier.discount_percent,
+      }));
+
+      const { error: insertError } = await supabase
+        .from('venue_loyalty_tiers')
+        .insert(tierInserts);
+
+      if (insertError) throw insertError;
+    }
+
+    return { error: null };
+  } catch (error: any) {
+    console.error('Error saving loyalty tiers:', error);
+    return { error: error.message || 'Failed to save loyalty tiers' };
+  }
+}

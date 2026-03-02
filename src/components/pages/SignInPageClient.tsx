@@ -16,39 +16,55 @@ export function SignInPageClient() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({ email: "", password: "" });
   const router = useRouter();
+
+  const validateForm = () => {
+    let valid = true;
+    const newErrors = { email: "", password: "" };
+
+    if (!email) {
+      newErrors.email = "Email is required";
+      valid = false;
+    } else if (!/\S+@\S+\.\S+/.test(email)) {
+      newErrors.email = "Please enter a valid email";
+      valid = false;
+    }
+
+    if (!password) {
+      newErrors.password = "Password is required";
+      valid = false;
+    } else if (password.length < 6) {
+      newErrors.password = "Password must be at least 6 characters";
+      valid = false;
+    }
+
+    setErrors(newErrors);
+    return valid;
+  };
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!email || !password) {
-      toast.error("Please fill in all fields");
-      return;
-    }
+    if (!validateForm()) return;
 
     setLoading(true);
 
     try {
-      console.log('Starting sign in...');
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      console.log('Sign in response:', { data, error });
-
       if (error) throw error;
 
       if (data.user) {
-        console.log('User signed in:', data.user.id);
-        // Check user role
+        // Fetch user role
         const { data: profile } = await supabase
           .from('profiles')
           .select('role')
           .eq('id', data.user.id)
           .single();
-
-        console.log('User profile:', profile);
 
         // Block admins from signing in here
         if (profile?.role === 'admin') {
@@ -58,12 +74,20 @@ export function SignInPageClient() {
           return;
         }
 
+        // Cache role in localStorage
+        if (profile?.role) {
+          localStorage.setItem('user_role', profile.role);
+        }
+
         toast.success("Welcome back!");
-        console.log('Redirecting to dashboard...');
         
-        // Give a small delay to ensure session is saved, then redirect
+        // Route based on role — owners go to dashboard, players go to home
         setTimeout(() => {
-          window.location.href = '/owner/dashboard';
+          if (profile?.role === 'venue_owner') {
+            window.location.href = '/owner/dashboard';
+          } else {
+            window.location.href = '/';
+          }
         }, 100);
         
         // Keep loading state to prevent UI flicker
@@ -71,7 +95,6 @@ export function SignInPageClient() {
       }
     } catch (error: any) {
       setLoading(false);
-      // Handle network errors and authentication errors with consistent messaging
       if (error.message?.includes('fetch') || error.message?.includes('network') || !error.message) {
         toast.error("Invalid email or password. Please check your credentials and try again.");
       } else if (error.message?.includes('Invalid login credentials') || error.message?.includes('Email not confirmed')) {
@@ -108,10 +131,15 @@ export function SignInPageClient() {
                 type="email"
                 placeholder="your@email.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (errors.email) setErrors(prev => ({ ...prev, email: '' }));
+                }}
                 disabled={loading}
                 required
+                className={errors.email ? 'border-destructive' : ''}
               />
+              {errors.email && <p className="text-xs text-destructive mt-1">{errors.email}</p>}
             </div>
 
             <div>
@@ -121,10 +149,15 @@ export function SignInPageClient() {
                 type="password"
                 placeholder="••••••••"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (errors.password) setErrors(prev => ({ ...prev, password: '' }));
+                }}
                 disabled={loading}
                 required
+                className={errors.password ? 'border-destructive' : ''}
               />
+              {errors.password && <p className="text-xs text-destructive mt-1">{errors.password}</p>}
             </div>
 
             <Button 
@@ -144,26 +177,23 @@ export function SignInPageClient() {
             </Button>
           </form>
 
-          <div className="mt-6 pt-6 border-t border-border space-y-3">
+          <div className="mt-6 pt-6 border-t border-border">
             <p className="text-sm text-muted-foreground text-center">
               Don't have an account?{' '}
-              <Link href="/signup" className="text-primary hover:underline">
-                Create venue owner account
-              </Link>
-            </p>
-            <p className="text-sm text-muted-foreground text-center">
-              <Link href="/" className="text-primary hover:underline">
-                ← Back to Home Page
+              <Link href="/signup" className="text-primary hover:underline font-medium">
+                Create Account
               </Link>
             </p>
           </div>
         </Card>
 
         <p className="text-xs text-muted-foreground text-center mt-6">
-          By signing in, you agree to our Terms of Service and Privacy Policy.
+          By signing in, you agree to our{' '}
+          <Link href="/terms" className="text-primary hover:underline">Terms of Service</Link>
+          {' '}and{' '}
+          <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>.
         </p>
       </div>
     </div>
   );
 }
-

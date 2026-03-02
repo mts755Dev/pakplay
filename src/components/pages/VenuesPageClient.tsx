@@ -10,7 +10,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import Link from "next/link";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
-import { Search, MapPin, Star, Loader2, Clock, Menu } from "lucide-react";
+import { Search, MapPin, Star, Loader2, Clock, Menu, LogOut } from "lucide-react";
 import { useEffect, useState, useRef, useCallback, useMemo, memo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Tables } from "@/integrations/supabase/types";
@@ -177,6 +177,7 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
   const [user, setUser] = useState<any>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
   
   const [offset, setOffset] = useState(hasServerData ? initialVenues.length : 0);
   const observerTarget = useRef<HTMLDivElement>(null);
@@ -192,6 +193,10 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
     const cachedRole = localStorage.getItem('user_role');
     if (cachedRole) {
       setUserRole(cachedRole);
+      setAuthLoading(false); // Show navigation immediately with cached data
+    } else {
+      // If no cached role, show navigation after short delay to prevent long loading
+      setTimeout(() => setAuthLoading(false), 300);
     }
     
     checkUser();
@@ -240,8 +245,13 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
     
     // Skip initial fetch if we have server data and no filters are applied
     if (hasLoadedInitial && !debouncedSearchTerm && selectedProvince === "" && selectedCity === "" && selectedArea === "" && selectedSubArea === "" && selectedSport === "all" && priceSort === "none" && minPrice === "" && maxPrice === "") {
-      setHasLoadedInitial(false); // Mark that we've checked initial load
+      // We have SSR data and no filters, so just use the initial data
       return;
+    }
+    
+    // Mark that we've now applied filters or search, so we need to fetch
+    if (hasLoadedInitial) {
+      setHasLoadedInitial(false);
     }
     
     if (abortControllerRef.current) {
@@ -304,6 +314,8 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
       }
     } catch (error) {
       // Silent fail
+    } finally {
+      setAuthLoading(false);
     }
   };
 
@@ -317,6 +329,22 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
     if (userRole === 'admin') return 'Admin Dashboard';
     if (userRole === 'venue_owner') return 'Dashboard';
     return 'Sign In';
+  };
+
+  const isLoggedIn = !!user;
+  const isPlayer = userRole === 'player';
+  const isOwner = userRole === 'venue_owner';
+
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut();
+      setUser(null);
+      setUserRole(null);
+      localStorage.removeItem('user_role');
+      window.location.href = '/';
+    } catch (error) {
+      console.error('Sign out error:', error);
+    }
   };
 
   const fetchVenues = async (fetchOffset: number, isInitialFetch: boolean = false) => {
@@ -573,13 +601,47 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
             <Link href="/contact">
               <Button variant="ghost">Contact Us</Button>
             </Link>
-            <Link href="/signup">
-              <Button variant="outline">List Your Venue</Button>
-            </Link>
-            {mounted && (
-              <Link href={getDashboardLink()}>
-                <Button suppressHydrationWarning>{getDashboardLabel()}</Button>
-              </Link>
+
+            {!authLoading && (
+              <>
+                {/* Show "Sign Up" only when NOT logged in as player */}
+                {!isPlayer && !isLoggedIn && (
+                  <Link href="/signup">
+                    <Button variant="outline" size="sm">Sign Up</Button>
+                  </Link>
+                )}
+
+                {isLoggedIn ? (
+                  <>
+                    {/* My Bookings button for players */}
+                    {isPlayer && (
+                      <Link href="/user/bookings">
+                        <Button variant="outline" size="sm">My Bookings</Button>
+                      </Link>
+                    )}
+                    {/* Dashboard button for owners */}
+                    {isOwner && (
+                      <Link href="/owner/dashboard">
+                        <Button size="sm">Dashboard</Button>
+                      </Link>
+                    )}
+                    {/* Sign Out button */}
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={handleSignOut}
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      <LogOut className="w-4 h-4 mr-1" />
+                      Sign Out
+                    </Button>
+                  </>
+                ) : (
+                  <Link href={getDashboardLink()}>
+                    <Button size="sm" suppressHydrationWarning>{getDashboardLabel()}</Button>
+                  </Link>
+                )}
+              </>
             )}
           </div>
 
@@ -607,13 +669,51 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
                 <Link href="/contact">
                   <Button variant="ghost" className="w-full justify-start">Contact Us</Button>
                 </Link>
-                <Link href="/signup">
-                  <Button variant="outline" className="w-full">List Your Venue</Button>
-                </Link>
-                {mounted && (
-                  <Link href={getDashboardLink()}>
-                    <Button className="w-full" suppressHydrationWarning>{getDashboardLabel()}</Button>
-                  </Link>
+
+                {!authLoading && (
+                  <>
+                    {/* Show "Sign Up" only when NOT logged in as player */}
+                    {!isPlayer && !isLoggedIn && (
+                      <Link href="/signup">
+                        <Button variant="outline" className="w-full mb-3 text-lg">
+                          Sign Up
+                        </Button>
+                      </Link>
+                    )}
+
+                    {isLoggedIn ? (
+                      <>
+                        {isPlayer && (
+                          <Link href="/user/bookings">
+                            <Button variant="outline" className="w-full mb-3 text-lg">
+                              My Bookings
+                            </Button>
+                          </Link>
+                        )}
+                        {isOwner && (
+                          <Link href="/owner/dashboard">
+                            <Button className="w-full mb-3 text-lg">
+                              Dashboard
+                            </Button>
+                          </Link>
+                        )}
+                        <Button 
+                          variant="ghost" 
+                          className="w-full text-lg text-muted-foreground hover:text-destructive"
+                          onClick={handleSignOut}
+                        >
+                          <LogOut className="w-5 h-5 mr-2" />
+                          Sign Out
+                        </Button>
+                      </>
+                    ) : (
+                      <Link href={getDashboardLink()}>
+                        <Button className="w-full text-lg" suppressHydrationWarning>
+                          {getDashboardLabel()}
+                        </Button>
+                      </Link>
+                    )}
+                  </>
                 )}
               </div>
             </SheetContent>

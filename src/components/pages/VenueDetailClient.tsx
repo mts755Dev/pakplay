@@ -19,6 +19,7 @@ import { Turnstile } from "@marsidev/react-turnstile";
 import { formatFullLocation, getCityById } from "@/lib/locationHelpers";
 import ppLogo from "@/assets/pp logo.png";
 import { AdBanner, AdRectangle, AdNative } from "@/components/AdSlot";
+import { fetchVenueLoyaltyTiers, fetchUserLoyaltyStatus, LoyaltyTier } from "@/lib/server-actions";
 
 type Venue = Tables<'venues'>;
 type VenuePhoto = Tables<'venue_photos'>;
@@ -38,13 +39,19 @@ interface VenueDetailClientProps {
   initialVenue?: VenueWithReviews;
   initialReviews?: VenueReview[];
   initialActiveOffer?: SpecialOffer | null;
+  initialLoyaltyTiers?: any[] | null;
+  initialLoyaltyStatus?: any | null;
+  initialUserEmail?: string | null;
 }
 
 export function VenueDetailClient({ 
   slug,
   initialVenue,
   initialReviews = [],
-  initialActiveOffer
+  initialActiveOffer,
+  initialLoyaltyTiers = null,
+  initialLoyaltyStatus = null,
+  initialUserEmail = null
 }: VenueDetailClientProps) {
   const router = useRouter();
   const [venue, setVenue] = useState<VenueWithReviews | null>(initialVenue || null);
@@ -75,6 +82,23 @@ export function VenueDetailClient({
   const [ownerEmail, setOwnerEmail] = useState<string | null>(null);
   const [turnstileKey, setTurnstileKey] = useState(0);
   const [isOwner, setIsOwner] = useState(false);
+  // Initialize currentUser with SSR data if available
+  const [currentUser, setCurrentUser] = useState<any>(
+    initialUserEmail ? { email: initialUserEmail } : null
+  );
+  const [userProfile, setUserProfile] = useState<any>(null);
+  // If we have SSR loyalty data, we know auth was checked on server
+  const [authChecked, setAuthChecked] = useState(initialLoyaltyTiers !== null);
+
+  // Loyalty program state - initialize with server-side data
+  const [loyaltyTiers, setLoyaltyTiers] = useState<any[]>(initialLoyaltyTiers || []);
+  const [loyaltyStatus, setLoyaltyStatus] = useState<{
+    completedBookings: number;
+    currentTier: any | null;
+    nextTier: any | null;
+  } | null>(initialLoyaltyStatus);
+  const [selectedDiscount, setSelectedDiscount] = useState<'offer' | 'loyalty' | null>(null);
+  const hasInitialLoyaltyData = initialLoyaltyTiers !== null; // Track if we have SSR data
 
   // Calculate average rating from reviews
   const calculateAverageRating = () => {
@@ -147,26 +171,129 @@ export function VenueDetailClient({
     };
   }, [venue]);
 
-  // Check if current user is the venue owner
+  // Check if current user is logged in, fetch profile, and check ownership
   useEffect(() => {
-    const checkOwnership = async () => {
-      if (!venue) return;
-      
+    // Skip if we already have auth data from SSR
+    if (authChecked && initialUserEmail) {
+      return;
+    }
+
+    const checkUserAndOwnership = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
-        if (user && venue.owner_id === user.id) {
+        
+        // Only update if different from SSR data
+        if (!initialUserEmail || user?.email !== initialUserEmail) {
+          setCurrentUser(user);
+        }
+        
+        if (!user) {
+          setIsOwner(false);
+          setUserProfile(null);
+          setAuthChecked(true);
+          return;
+        }
+
+        // Fetch user profile for pre-filling form
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, phone, role')
+          .eq('id', user.id)
+          .single();
+
+        setUserProfile(profile);
+
+        // Pre-fill form fields with user data
+        if (user.email) setPlayerEmail(user.email);
+        if (profile?.full_name) setPlayerName(profile.full_name);
+        if (profile?.phone) setPlayerPhone(profile.phone);
+
+        // Check ownership
+        if (venue && venue.owner_id === user.id) {
           setIsOwner(true);
         } else {
           setIsOwner(false);
         }
+        
+        setAuthChecked(true);
       } catch (error) {
-        console.error('Error checking ownership:', error);
+        console.error('Error checking user:', error);
         setIsOwner(false);
+        setAuthChecked(true);
       }
     };
 
-    checkOwnership();
-  }, [venue]);
+    checkUserAndOwnership();
+  }, [venue, authChecked, initialUserEmail]);
+
+  // Always fetch user profile and auto-fill form when user is logged in
+  useEffect(() => {
+    const fetchUserProfileForForm = async () => {
+      // Only run if we have a user (from currentUser or initialUserEmail)
+      const hasUser = currentUser || initialUserEmail;
+      if (!hasUser) return;
+      
+      try {
+        // Get user from auth
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        // Fetch user profile
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, phone, role')
+          .eq('id', user.id)
+          .single();
+
+        if (profile) {
+          setUserProfile(profile);
+          
+          // Auto-fill form fields only if they're empty (don't overwrite user input)
+          setPlayerName(prev => prev || profile.full_name || '');
+          setPlayerPhone(prev => prev || profile.phone || '');
+          setPlayerEmail(prev => prev || user.email || '');
+        } else if (user.email) {
+          // If no profile but we have email, at least fill email
+          setPlayerEmail(prev => prev || user.email || '');
+        }
+      } catch (error) {
+        console.error('Error fetching user profile for form:', error);
+      }
+    };
+
+    // Small delay to ensure auth is ready
+    const timer = setTimeout(() => {
+      fetchUserProfileForForm();
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [currentUser, initialUserEmail]);
+
+  // Fetch loyalty tiers and user loyalty status (only if not provided by SSR)
+  useEffect(() => {
+    // Skip entirely if we have SSR data
+    if (hasInitialLoyaltyData) return;
+
+    const fetchLoyaltyData = async () => {
+      if (!venue) return;
+
+      try {
+        // Only fetch if we don't have initial data
+        const tiers = await fetchVenueLoyaltyTiers(venue.id);
+        setLoyaltyTiers(tiers);
+
+        // Fetch user's loyalty status if logged in
+        if (currentUser?.email) {
+          const status = await fetchUserLoyaltyStatus(venue.id, currentUser.email);
+          setLoyaltyStatus(status);
+        }
+      } catch (error) {
+        console.error('Error fetching loyalty data:', error);
+      }
+    };
+
+    fetchLoyaltyData();
+  }, [venue, currentUser, hasInitialLoyaltyData]);
 
   const fetchVenue = async () => {
     try {
@@ -343,8 +470,19 @@ export function VenueDetailClient({
     if (!bookingDate || !startTime || !endTime || !venue) return 0;
     
     const hours = calculateTotalHours();
-    const pricePerHour = activeOffer ? activeOffer.offer_price : venue.price_per_hour;
-    return Math.round(hours * pricePerHour);
+    let pricePerHour = venue.price_per_hour;
+    let discountPercent = 0;
+
+    // Apply selected discount
+    if (selectedDiscount === 'offer' && activeOffer) {
+      pricePerHour = activeOffer.offer_price;
+    } else if (selectedDiscount === 'loyalty' && loyaltyStatus?.currentTier) {
+      discountPercent = loyaltyStatus.currentTier.discount_percent;
+    }
+
+    const subtotal = hours * pricePerHour;
+    const discountAmount = (subtotal * discountPercent) / 100;
+    return Math.round(subtotal - discountAmount);
   };
 
   const handleBooking = async () => {
@@ -363,6 +501,23 @@ export function VenueDetailClient({
     
     if (totalHours > 8) {
       toast.error("Booking duration cannot exceed 8 hours. Please select a shorter time slot.");
+      return;
+    }
+
+    // Validate booking is not in the past and is at least 1 hour in advance
+    const now = new Date();
+    const bookingDateTime = new Date(`${bookingDate}T${startTime}`);
+    const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
+
+    // Check if booking time has already passed
+    if (bookingDateTime < now) {
+      toast.error("Cannot book for past dates or times");
+      return;
+    }
+
+    // Check if booking is at least 1 hour in advance
+    if (bookingDateTime < oneHourFromNow) {
+      toast.error("Please book at least 1 hour in advance");
       return;
     }
 
@@ -764,6 +919,167 @@ export function VenueDetailClient({
         </div>
       </section>
 
+      {/* Loyalty Badge & Progress - Right after hero (hidden for venue owners) */}
+      {loyaltyTiers.length > 0 && authChecked && !isOwner && (
+        <div className="container mx-auto px-4 -mt-12 relative z-10">
+          {/* Current Tier Badge */}
+          {loyaltyStatus?.currentTier && currentUser && !isOwner && (() => {
+            const getTierColor = (tierName: string) => {
+              const name = tierName.toLowerCase();
+              if (name.includes('silver')) return { bg: 'bg-gradient-to-br from-gray-100 to-gray-200', border: 'border-gray-300', text: 'text-gray-700', icon: 'text-gray-600', badge: 'bg-gray-500' };
+              if (name.includes('gold')) return { bg: 'bg-gradient-to-br from-yellow-50 to-yellow-100', border: 'border-yellow-300', text: 'text-yellow-800', icon: 'text-yellow-600', badge: 'bg-yellow-500' };
+              if (name.includes('platinum')) return { bg: 'bg-gradient-to-br from-purple-50 to-purple-100', border: 'border-purple-300', text: 'text-purple-800', icon: 'text-purple-600', badge: 'bg-purple-500' };
+              return { bg: 'bg-gradient-to-br from-blue-50 to-blue-100', border: 'border-blue-300', text: 'text-blue-800', icon: 'text-blue-600', badge: 'bg-blue-500' };
+            };
+            const colors = getTierColor(loyaltyStatus.currentTier.tier_name);
+            
+            return (
+              <Card className={`${colors.bg} border-2 ${colors.border} p-4 mb-4 shadow-lg`}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-12 h-12 rounded-full ${colors.badge} bg-opacity-20 flex items-center justify-center`}>
+                      <Award className={`w-6 h-6 ${colors.icon}`} />
+                    </div>
+                    <div>
+                      <h3 className={`font-bold text-lg ${colors.text}`}>
+                        {loyaltyStatus.currentTier.tier_name} Member
+                      </h3>
+                      <p className={`text-sm ${colors.text} opacity-70`}>Loyal Customer</p>
+                    </div>
+                  </div>
+                  <div className={`${colors.badge} text-white px-4 py-2 rounded-full font-bold text-sm`}>
+                    {loyaltyStatus.currentTier.discount_percent}% OFF
+                  </div>
+                </div>
+                
+                <div className={`border-t ${colors.border} pt-3 flex items-center justify-around`}>
+                  <div className="text-center">
+                    <p className={`text-2xl font-bold ${colors.text}`}>{loyaltyStatus.completedBookings}</p>
+                    <p className={`text-xs ${colors.text} opacity-70`}>Bookings</p>
+                  </div>
+                  <div className={`w-px h-10 ${colors.border}`}></div>
+                  <div className="text-center">
+                    <p className={`text-2xl font-bold ${colors.text}`}>{loyaltyStatus.currentTier.discount_percent}%</p>
+                    <p className={`text-xs ${colors.text} opacity-70`}>Discount</p>
+                  </div>
+                  <div className={`w-px h-10 ${colors.border}`}></div>
+                  <div className="text-center flex flex-col items-center">
+                    <CheckCircle className={`w-5 h-5 ${colors.icon}`} />
+                    <p className={`text-xs ${colors.text} opacity-70 mt-1`}>Active</p>
+                  </div>
+                </div>
+              </Card>
+            );
+          })()}
+
+          {/* Progress to Next Tier */}
+          {loyaltyStatus?.nextTier && currentUser && !isOwner && (() => {
+            const remaining = loyaltyStatus.nextTier.min_bookings - loyaltyStatus.completedBookings;
+            const progress = Math.min((loyaltyStatus.completedBookings / loyaltyStatus.nextTier.min_bookings) * 100, 100);
+            const hasCurrentTier = !!loyaltyStatus.currentTier;
+            
+            return (
+              <Card className="bg-white p-4 mb-4 shadow-lg relative overflow-hidden">
+                {/* Decorative circles */}
+                <div className="absolute -top-6 -right-6 w-20 h-20 bg-primary/5 rounded-full"></div>
+                <div className="absolute -bottom-8 -left-4 w-16 h-16 bg-yellow-500/5 rounded-full"></div>
+                
+                <div className="flex items-center justify-between mb-4 relative z-10">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                      <TrendingUp className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-base">
+                        {hasCurrentTier ? `Upgrade to ${loyaltyStatus.nextTier.tier_name}` : 'Earn Rewards'}
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        {remaining} more booking{remaining !== 1 ? 's' : ''} to go!
+                      </p>
+                    </div>
+                  </div>
+                  <div className="bg-yellow-500 text-white px-3 py-1.5 rounded-full font-bold text-xs">
+                    {loyaltyStatus.nextTier.discount_percent}% OFF
+                  </div>
+                </div>
+                
+                <div className="space-y-2 relative z-10">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-muted-foreground font-medium">Progress</span>
+                    <span className="text-primary font-bold">
+                      {loyaltyStatus.completedBookings}/{loyaltyStatus.nextTier.min_bookings}
+                    </span>
+                  </div>
+                  <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-primary rounded-full transition-all duration-500"
+                      style={{ width: `${progress}%` }}
+                    ></div>
+                  </div>
+                  <div className="flex justify-between text-xs font-semibold text-muted-foreground">
+                    <span>0</span>
+                    <span>{loyaltyStatus.nextTier.min_bookings}</span>
+                  </div>
+                </div>
+                
+                <div className="flex items-center justify-center gap-4 mt-3 pt-3 border-t relative z-10">
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <CheckCircle className="w-4 h-4 text-primary" />
+                    <span className="text-muted-foreground">{loyaltyStatus.completedBookings} completed</span>
+                  </div>
+                  <div className="w-px h-4 bg-border"></div>
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <Award className="w-4 h-4 text-yellow-500" />
+                    <span className="text-muted-foreground">{loyaltyStatus.nextTier.tier_name} at {loyaltyStatus.nextTier.min_bookings}</span>
+                  </div>
+                </div>
+              </Card>
+            );
+          })()}
+
+          {/* Show program for non-logged-in users */}
+          {!currentUser && (
+            <Card className="bg-white p-4 mb-4 shadow-lg relative overflow-hidden">
+              <div className="absolute -top-6 -right-6 w-20 h-20 bg-primary/5 rounded-full"></div>
+              
+              <div className="flex items-center gap-3 mb-4 relative z-10">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Award className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base">Loyalty Rewards</h3>
+                  <p className="text-sm text-muted-foreground">Sign in & book to earn discounts!</p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-3 gap-2 relative z-10">
+                {loyaltyTiers.map((tier, i) => {
+                  const getTierColor = (tierName: string) => {
+                    const name = tierName.toLowerCase();
+                    if (name.includes('silver')) return 'border-gray-400 text-gray-600 bg-gray-50';
+                    if (name.includes('gold')) return 'border-yellow-400 text-yellow-600 bg-yellow-50';
+                    if (name.includes('platinum')) return 'border-purple-400 text-purple-600 bg-purple-50';
+                    return 'border-blue-400 text-blue-600 bg-blue-50';
+                  };
+                  const colorClass = getTierColor(tier.tier_name);
+                  
+                  return (
+                    <div key={tier.id || i} className={`${colorClass} border rounded-lg p-2 text-center`}>
+                      <Award className="w-4 h-4 mx-auto mb-1 opacity-70" />
+                      <p className="font-semibold text-xs mb-0.5">{tier.tier_name}</p>
+                      <p className="text-[10px] opacity-70">{tier.min_bookings} bookings</p>
+                      <div className="mt-1 bg-white/50 rounded px-1.5 py-0.5">
+                        <p className="text-[10px] font-bold">{tier.discount_percent}% off</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          )}
+        </div>
+      )}
+
       {/* Ad Slot 1: Top Banner - After Hero */}
       <div className="container mx-auto px-4 mt-8">
         <AdBanner />
@@ -1024,170 +1340,278 @@ export function VenueDetailClient({
             )}
           </div>
 
-          {/* Booking Sidebar */}
+          {/* Booking Sidebar — hidden for venue owners */}
+          {authChecked && !isOwner && (
           <div className="lg:col-span-1">
             <div className="lg:sticky lg:top-24 h-[calc(100vh-7rem)]">
               <Card id="booking" className="flex flex-col h-full p-2 scroll-mt-24 bg-blue-600 border-blue-600">
                 <h3 className="text-lg font-bold mb-2 text-white shrink-0">Book Your Slot</h3>
                 
-                <div className="flex-1 flex flex-col gap-2 min-h-0 overflow-hidden px-1">
-                  <div className="shrink-0">
-                    <Label className="text-white text-xs mb-1 block">Date</Label>
-                    <Input
-                      type="date"
-                      value={bookingDate}
-                      onChange={(e) => {
-                        const selectedDate = new Date(e.target.value);
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0);
-                        
-                        if (selectedDate < today) {
-                          toast.error("Please select a future date");
-                          return;
-                        }
-                        setBookingDate(e.target.value);
-                      }}
-                      min={new Date().toISOString().split('T')[0]}
-                      className="text-xs w-full h-9"
-                    />
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-2 shrink-0">
-                    <div className="min-w-0">
-                      <Label className="text-white text-xs mb-1 block">Start Time</Label>
-                      <Input
-                        type="time"
-                        value={startTime}
-                        onChange={(e) => {
-                          const newStartTime = e.target.value;
-                          setStartTime(newStartTime);
-                          
-                          // Validate time range
-                          if (endTime && newStartTime) {
-                            const start = new Date(`2000-01-01T${newStartTime}`);
-                            let end = new Date(`2000-01-01T${endTime}`);
-                            
-                            if (end <= start) {
-                              end = new Date(`2000-01-02T${endTime}`);
-                            }
-                            
-                            const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-                            
-                            if (hours > 8) {
-                              toast.error("Booking duration cannot exceed 8 hours");
-                            }
-                          }
-                        }}
-                        className="text-xs w-full h-9"
-                      />
+                {/* Show sign-in prompt if user is NOT logged in */}
+                {!currentUser ? (
+                  <div className="flex-1 flex flex-col items-center justify-center px-4 text-center">
+                    <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center mb-4">
+                      <Shield className="w-8 h-8 text-white" />
                     </div>
-                    <div className="min-w-0">
-                      <Label className="text-white text-xs mb-1 block">End Time</Label>
-                      <Input
-                        type="time"
-                        value={endTime}
-                        onChange={(e) => {
-                          const newEndTime = e.target.value;
-                          setEndTime(newEndTime);
-                          
-                          // Validate time range
-                          if (startTime && newEndTime) {
-                            const start = new Date(`2000-01-01T${startTime}`);
-                            let end = new Date(`2000-01-01T${newEndTime}`);
-                            
-                            if (end <= start) {
-                              end = new Date(`2000-01-02T${newEndTime}`);
-                            }
-                            
-                            const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-                            
-                            if (hours > 8) {
-                              toast.error("Booking duration cannot exceed 8 hours");
-                            }
-                          }
-                        }}
-                        className="text-xs w-full h-9"
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="shrink-0">
-                    <Label className="text-white text-xs mb-1 block">Full Name</Label>
-                    <Input
-                      value={playerName}
-                      onChange={(e) => setPlayerName(e.target.value)}
-                      placeholder="John Doe"
-                      className="text-xs w-full h-9"
-                    />
-                  </div>
-                  
-                  <div className="shrink-0">
-                    <Label className="text-white text-xs mb-1 block">Phone Number</Label>
-                    <Input
-                      value={playerPhone}
-                      onChange={(e) => setPlayerPhone(e.target.value)}
-                      placeholder="+92 300 1234567"
-                      className="text-xs w-full h-9"
-                    />
-                  </div>
-                  
-                  <div className="shrink-0">
-                    <Label className="text-white text-xs mb-1 block">Email Address</Label>
-                    <Input
-                      type="email"
-                      value={playerEmail}
-                      onChange={(e) => setPlayerEmail(e.target.value)}
-                      placeholder="john@example.com"
-                      className="text-xs w-full h-9"
-                    />
-                  </div>
-                  
-                  <div className="shrink-0">
-                    <Label className="text-white text-xs mb-1 block">Additional Notes (Optional)</Label>
-                    <Textarea
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      placeholder="Any special requests?"
-                      className="text-xs w-full resize-none h-20"
-                    />
-                  </div>
-
-                  <div className="mt-auto shrink-0">
-                    {bookingDate && startTime && endTime && (
-                      <div className="bg-white/20 backdrop-blur-sm p-2 rounded-lg border border-white/30 mb-2">
-                        <div className="flex justify-between items-center gap-2">
-                          <span className="font-semibold text-white text-xs">Total Price:</span>
-                          <span className="text-base font-bold text-white">PKR {calculateTotalPrice().toLocaleString()}</span>
-                        </div>
-                        {activeOffer && (
-                          <p className="text-[10px] text-white/80 mt-0.5">Special offer applied!</p>
-                        )}
-                      </div>
-                    )}
-                    
-                    <Button 
-                      onClick={handleBooking}
-                      disabled={submitting || !bookingDate || !startTime || !endTime || !playerName || !playerPhone || !playerEmail}
-                      className="w-full bg-white text-blue-600 hover:bg-white/90 text-xs font-bold h-9 mb-1"
-                    >
-                      {submitting ? (
-                        <>
-                          <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
-                          Processing...
-                        </>
-                      ) : (
-                        <>
-                          Book via WhatsApp
-                          <ArrowRight className="w-3 h-3 ml-1.5" />
-                        </>
-                      )}
-                    </Button>
-                    
-                    <p className="text-[10px] text-white/80 text-center leading-tight">
-                      You'll be redirected to WhatsApp to confirm your booking
+                    <h4 className="text-white font-bold text-lg mb-2">Sign In Required</h4>
+                    <p className="text-white/80 text-sm mb-6 leading-relaxed">
+                      Please sign in to your account to book this venue
+                    </p>
+                    <Link href="/signin" className="w-full">
+                      <Button className="w-full bg-white text-blue-600 hover:bg-white/90 font-bold">
+                        Sign In to Book
+                      </Button>
+                    </Link>
+                    <p className="text-white/70 text-xs mt-3">
+                      Don't have an account?{' '}
+                      <Link href="/signup" className="text-white underline font-medium">
+                        Sign Up
+                      </Link>
                     </p>
                   </div>
-                </div>
+                ) : (
+                  /* Booking form for logged-in users */
+                  <div className="flex-1 flex flex-col min-h-0">
+                    {/* Scrollable form content */}
+                    <div className="flex-1 overflow-y-auto px-1 space-y-3 pb-2 booking-form-scrollbar">
+                      <div className="space-y-2">
+                        <Label className="text-white text-sm font-semibold mb-1 block">Booking Date</Label>
+                        <Input
+                          type="date"
+                          value={bookingDate}
+                          onChange={(e) => {
+                            const selectedDate = new Date(e.target.value);
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            
+                            if (selectedDate < today) {
+                              toast.error("Please select a future date");
+                              return;
+                            }
+                            setBookingDate(e.target.value);
+                          }}
+                          min={new Date().toISOString().split('T')[0]}
+                          className="text-sm w-full h-10 bg-white/10 border-white/30 text-white placeholder:text-white/50 focus:bg-white/20"
+                        />
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label className="text-white text-sm font-semibold mb-1 block">Start Time</Label>
+                          <Input
+                            type="time"
+                            value={startTime}
+                            onChange={(e) => {
+                              const newStartTime = e.target.value;
+                              setStartTime(newStartTime);
+                              
+                              if (endTime && newStartTime) {
+                                const start = new Date(`2000-01-01T${newStartTime}`);
+                                let end = new Date(`2000-01-01T${endTime}`);
+                                
+                                if (end <= start) {
+                                  end = new Date(`2000-01-02T${endTime}`);
+                                }
+                                
+                                const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+                                
+                                if (hours > 8) {
+                                  toast.error("Booking duration cannot exceed 8 hours");
+                                }
+                              }
+                            }}
+                            className="text-sm w-full h-10 bg-white/10 border-white/30 text-white placeholder:text-white/50 focus:bg-white/20"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-white text-sm font-semibold mb-1 block">End Time</Label>
+                          <Input
+                            type="time"
+                            value={endTime}
+                            onChange={(e) => {
+                              const newEndTime = e.target.value;
+                              setEndTime(newEndTime);
+                              
+                              if (startTime && newEndTime) {
+                                const start = new Date(`2000-01-01T${startTime}`);
+                                let end = new Date(`2000-01-01T${newEndTime}`);
+                                
+                                if (end <= start) {
+                                  end = new Date(`2000-01-02T${newEndTime}`);
+                                }
+                                
+                                const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+                                
+                                if (hours > 8) {
+                                  toast.error("Booking duration cannot exceed 8 hours");
+                                }
+                              }
+                            }}
+                            className="text-sm w-full h-10 bg-white/10 border-white/30 text-white placeholder:text-white/50 focus:bg-white/20"
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label className="text-white text-sm font-semibold mb-1 block">Full Name</Label>
+                        <Input
+                          value={playerName}
+                          onChange={(e) => setPlayerName(e.target.value)}
+                          placeholder="Enter your full name"
+                          className="text-sm w-full h-10 bg-white/10 border-white/30 text-white placeholder:text-white/50 focus:bg-white/20"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label className="text-white text-sm font-semibold mb-1 block">Phone Number</Label>
+                        <Input
+                          value={playerPhone}
+                          onChange={(e) => setPlayerPhone(e.target.value)}
+                          placeholder="+92 300 1234567"
+                          className="text-sm w-full h-10 bg-white/10 border-white/30 text-white placeholder:text-white/50 focus:bg-white/20"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label className="text-white text-sm font-semibold mb-1 block">Email Address</Label>
+                        <Input
+                          type="email"
+                          value={playerEmail}
+                          onChange={(e) => setPlayerEmail(e.target.value)}
+                          placeholder="your@email.com"
+                          className="text-sm w-full h-10 bg-white/10 border-white/30 text-white placeholder:text-white/50 focus:bg-white/20"
+                          disabled={!!currentUser}
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label className="text-white text-sm font-semibold mb-1 block">Additional Notes (Optional)</Label>
+                        <Textarea
+                          value={notes}
+                          onChange={(e) => setNotes(e.target.value)}
+                          placeholder="Any special requests or notes..."
+                          className="text-sm w-full resize-none h-24 bg-white/10 border-white/30 text-white placeholder:text-white/50 focus:bg-white/20"
+                        />
+                      </div>
+
+                      {/* Discount Selection */}
+                      {(activeOffer || (loyaltyStatus && loyaltyStatus.currentTier)) && (
+                        <div className="space-y-2">
+                          <Label className="text-white text-sm font-semibold mb-2 block">Apply Discount</Label>
+                          <div className="space-y-2">
+                            {activeOffer && (
+                              <div
+                                onClick={() => setSelectedDiscount(selectedDiscount === 'offer' ? null : 'offer')}
+                                className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                                  selectedDiscount === 'offer'
+                                    ? 'bg-white border-white shadow-lg'
+                                    : 'bg-white/10 border-white/30 hover:bg-white/20 hover:border-white/50'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                                      selectedDiscount === 'offer' ? 'border-blue-600 bg-blue-600' : 'border-white'
+                                    }`}>
+                                      {selectedDiscount === 'offer' && (
+                                        <div className="w-2.5 h-2.5 rounded-full bg-white"></div>
+                                      )}
+                                    </div>
+                                    <span className={`text-sm font-semibold ${
+                                      selectedDiscount === 'offer' ? 'text-blue-600' : 'text-white'
+                                    }`}>
+                                      {activeOffer.offer_name}
+                                    </span>
+                                  </div>
+                                  <span className={`text-sm font-bold ${
+                                    selectedDiscount === 'offer' ? 'text-blue-600' : 'text-white'
+                                  }`}>
+                                    PKR {activeOffer.offer_price}/hr
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+
+                            {loyaltyStatus && loyaltyStatus.currentTier && (
+                              <div
+                                onClick={() => setSelectedDiscount(selectedDiscount === 'loyalty' ? null : 'loyalty')}
+                                className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                                  selectedDiscount === 'loyalty'
+                                    ? 'bg-white border-white shadow-lg'
+                                    : 'bg-white/10 border-white/30 hover:bg-white/20 hover:border-white/50'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                                      selectedDiscount === 'loyalty' ? 'border-blue-600 bg-blue-600' : 'border-white'
+                                    }`}>
+                                      {selectedDiscount === 'loyalty' && (
+                                        <div className="w-2.5 h-2.5 rounded-full bg-white"></div>
+                                      )}
+                                    </div>
+                                    <span className={`text-sm font-semibold ${
+                                      selectedDiscount === 'loyalty' ? 'text-blue-600' : 'text-white'
+                                    }`}>
+                                      {loyaltyStatus.currentTier.tier_name} Loyalty
+                                    </span>
+                                  </div>
+                                  <span className={`text-sm font-bold ${
+                                    selectedDiscount === 'loyalty' ? 'text-blue-600' : 'text-white'
+                                  }`}>
+                                    {loyaltyStatus.currentTier.discount_percent}% OFF
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Sticky footer with price and button */}
+                    <div className="shrink-0 border-t border-white/20 pt-3 mt-2 bg-blue-600">
+                      {bookingDate && startTime && endTime && (
+                        <div className="bg-white/20 backdrop-blur-sm p-3 rounded-lg border border-white/30 mb-3">
+                          <div className="flex justify-between items-center">
+                            <span className="font-semibold text-white text-sm">Total Price:</span>
+                            <span className="text-lg font-bold text-white">PKR {calculateTotalPrice().toLocaleString()}</span>
+                          </div>
+                          {selectedDiscount === 'offer' && activeOffer && (
+                            <p className="text-xs text-white/90 mt-1.5">✨ Special offer applied!</p>
+                          )}
+                          {selectedDiscount === 'loyalty' && loyaltyStatus?.currentTier && (
+                            <p className="text-xs text-white/90 mt-1.5">
+                              ✨ {loyaltyStatus.currentTier.tier_name} loyalty discount applied!
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      
+                      <Button 
+                        onClick={handleBooking}
+                        disabled={submitting || !bookingDate || !startTime || !endTime || !playerName || !playerPhone || !playerEmail}
+                        className="w-full bg-white text-blue-600 hover:bg-white/90 font-bold h-11 text-sm shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {submitting ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            Book via WhatsApp
+                            <ArrowRight className="w-4 h-4 ml-2" />
+                          </>
+                        )}
+                      </Button>
+                      
+                      <p className="text-xs text-white/80 text-center mt-2 leading-tight">
+                        You'll be redirected to WhatsApp to confirm your booking
+                      </p>
+                    </div>
+                  </div>
+                )}
               </Card>
 
               {/* Ad Slot 4: Sidebar Rectangle - Sticky */}
@@ -1196,6 +1620,7 @@ export function VenueDetailClient({
               </div>
             </div>
           </div>
+          )}
         </div>
       </div>
 

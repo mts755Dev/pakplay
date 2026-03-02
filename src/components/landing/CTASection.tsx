@@ -4,7 +4,13 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { ArrowRight, Sparkles } from "lucide-react";
 
-export const CTASection = () => {
+interface CTASectionProps {
+  userRole?: string | null;
+}
+
+export const CTASection = ({ userRole }: CTASectionProps) => {
+  const isPlayer = userRole === 'player';
+
   return (
     <section className="py-20 bg-gradient-to-br from-primary via-primary to-primary/90 text-primary-foreground relative overflow-hidden">
       {/* Background Elements */}
@@ -38,15 +44,18 @@ export const CTASection = () => {
                 <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
               </Button>
             </Link>
-            <Link href="/signup">
-              <Button 
-                size="lg" 
-                variant="outline" 
-                className="border-2 border-white/50 bg-white/10 hover:bg-white/20 backdrop-blur-sm text-lg px-10 py-7 text-white"
-              >
-                List Your Venue
-              </Button>
-            </Link>
+            {/* Hide "Sign Up" for logged-in players */}
+            {!isPlayer && (
+              <Link href="/signup">
+                <Button 
+                  size="lg" 
+                  variant="outline" 
+                  className="border-2 border-white/50 bg-white/10 hover:bg-white/20 backdrop-blur-sm text-lg px-10 py-7 text-white"
+                >
+                  Sign Up
+                </Button>
+              </Link>
+            )}
           </div>
 
           <p className="text-sm text-primary-foreground/70 mt-8">
@@ -57,4 +66,3 @@ export const CTASection = () => {
     </section>
   );
 };
-

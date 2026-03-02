@@ -18,6 +18,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { LocationSelector } from "@/components/LocationSelector";
+import { fetchVenueLoyaltyTiers, saveVenueLoyaltyTiers } from "@/lib/server-actions";
 
 interface OwnerVenuesClientProps {
   initialVenues: any[];
@@ -79,6 +80,12 @@ export function OwnerVenuesClient({ initialVenues }: OwnerVenuesClientProps) {
     startTime: string;
     endTime: string;
     price: string;
+  }>>([]);
+
+  const [loyaltyTiers, setLoyaltyTiers] = useState<Array<{
+    tier_name: string;
+    min_bookings: string;
+    discount_percent: string;
   }>>([]);
 
   const commonAmenities = [
@@ -206,6 +213,18 @@ export function OwnerVenuesClient({ initialVenues }: OwnerVenuesClientProps) {
         setPricingRules(rules);
       } else {
         setPricingRules([]);
+      }
+
+      // Load loyalty tiers
+      const tiers = await fetchVenueLoyaltyTiers(venueData.id);
+      if (tiers.length > 0) {
+        setLoyaltyTiers(tiers.map(t => ({
+          tier_name: t.tier_name,
+          min_bookings: t.min_bookings.toString(),
+          discount_percent: t.discount_percent.toString(),
+        })));
+      } else {
+        setLoyaltyTiers([]);
       }
 
     } catch (error) {
@@ -454,6 +473,22 @@ export function OwnerVenuesClient({ initialVenues }: OwnerVenuesClientProps) {
         }
       }
 
+      // Save loyalty tiers
+      const validTiers = loyaltyTiers.filter(
+        t => t.tier_name.trim() && parseInt(t.min_bookings) > 0 && parseFloat(t.discount_percent) > 0
+      );
+      const { error: loyaltyError } = await saveVenueLoyaltyTiers(
+        editingVenue.id,
+        validTiers.map(t => ({
+          tier_name: t.tier_name.trim(),
+          min_bookings: parseInt(t.min_bookings),
+          discount_percent: parseFloat(t.discount_percent),
+        }))
+      );
+      if (loyaltyError) {
+        console.error('Error saving loyalty tiers:', loyaltyError);
+      }
+
       toast.success("Venue updated successfully!");
       setEditingVenue(null);
       fetchVenues(user!.id);
@@ -607,7 +642,12 @@ export function OwnerVenuesClient({ initialVenues }: OwnerVenuesClientProps) {
       </div>
 
       {/* Edit Dialog */}
-      <Dialog open={!!editingVenue} onOpenChange={(open) => !open && setEditingVenue(null)}>
+      <Dialog open={!!editingVenue} onOpenChange={(open) => {
+        if (!open) {
+          setEditingVenue(null);
+          setLoyaltyTiers([]);
+        }
+      }}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Venue</DialogTitle>
@@ -916,6 +956,118 @@ export function OwnerVenuesClient({ initialVenues }: OwnerVenuesClientProps) {
                     </div>
                   </div>
                 ))}
+              </div>
+
+              {/* Loyalty Program */}
+              <div className="space-y-3 border-t pt-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-sm">Loyalty Program</h3>
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setLoyaltyTiers([...loyaltyTiers, {
+                      tier_name: loyaltyTiers.length === 0 ? 'Silver' : loyaltyTiers.length === 1 ? 'Gold' : 'Platinum',
+                      min_bookings: '',
+                      discount_percent: '',
+                    }])}
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Add Tier
+                  </Button>
+                </div>
+
+                {loyaltyTiers.length === 0 && (
+                  <div className="border-2 border-dashed rounded p-4 text-center">
+                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                      <DollarSign className="w-8 h-8 opacity-50" />
+                      <p className="text-xs font-medium">No loyalty tiers configured</p>
+                      <p className="text-xs">Click "Add Tier" to reward your regular players</p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  {loyaltyTiers.map((tier, index) => (
+                    <div key={index} className="border rounded p-3 space-y-2 bg-amber-50/50 border-amber-200">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <DollarSign className="w-3 h-3 text-amber-600" />
+                          <span className="text-xs font-semibold">Tier {index + 1}</span>
+                        </div>
+                        <Button 
+                          type="button" 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => setLoyaltyTiers(loyaltyTiers.filter((_, i) => i !== index))}
+                        >
+                          <Trash2 className="w-3 h-3 text-destructive" />
+                        </Button>
+                      </div>
+
+                      <div>
+                        <Label className="text-xs">Tier Name *</Label>
+                        <Input
+                          placeholder="e.g., Silver, Gold, Platinum"
+                          className="text-xs h-8 mt-1"
+                          value={tier.tier_name}
+                          onChange={(e) => {
+                            const updated = [...loyaltyTiers];
+                            updated[index] = { ...updated[index], tier_name: e.target.value };
+                            setLoyaltyTiers(updated);
+                          }}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs">Min Bookings *</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            placeholder="e.g., 5"
+                            className="text-xs h-8 mt-1"
+                            value={tier.min_bookings}
+                            onChange={(e) => {
+                              const updated = [...loyaltyTiers];
+                              updated[index] = { ...updated[index], min_bookings: e.target.value.replace(/[^0-9]/g, '') };
+                              setLoyaltyTiers(updated);
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Discount % *</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.1"
+                            placeholder="e.g., 10"
+                            className="text-xs h-8 mt-1"
+                            value={tier.discount_percent}
+                            onChange={(e) => {
+                              const updated = [...loyaltyTiers];
+                              const cleaned = e.target.value.replace(/[^0-9.]/g, '');
+                              if (parseFloat(cleaned) <= 100 || cleaned === '') {
+                                updated[index] = { ...updated[index], discount_percent: cleaned };
+                                setLoyaltyTiers(updated);
+                              }
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {tier.min_bookings && tier.discount_percent && (
+                        <div className="bg-primary/10 border border-primary/20 rounded p-2 flex items-start gap-2">
+                          <DollarSign className="w-3 h-3 text-primary mt-0.5 flex-shrink-0" />
+                          <p className="text-xs text-primary">
+                            Players with {tier.min_bookings}+ bookings get {tier.discount_percent}% off
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* Photos - Compact */}

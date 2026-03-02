@@ -15,15 +15,18 @@ import { getAllProvinces, getCitiesByProvince } from "@/lib/locationHelpers";
 
 interface HeroSectionProps {
   initialStats?: any;
+  userRole?: string | null;
 }
 
-export const HeroSection = ({ initialStats }: HeroSectionProps) => {
+export const HeroSection = ({ initialStats, userRole }: HeroSectionProps) => {
   const router = useRouter();
   const [selectedProvince, setSelectedProvince] = useState("");
   const [selectedCity, setSelectedCity] = useState("");
   
   const provinces = getAllProvinces();
   const cities = selectedProvince ? getCitiesByProvince(selectedProvince) : [];
+
+  const isPlayer = userRole === 'player';
 
   const handleSearch = () => {
     const params = new URLSearchParams();
@@ -147,11 +150,14 @@ export const HeroSection = ({ initialStats }: HeroSectionProps) => {
                   Browse All Venues
                 </Button>
               </Link>
-              <Link href="/signup" className="w-full sm:w-auto">
-                <Button size="lg" variant="outline" className="w-full sm:w-auto border-2 border-white/30 bg-white/10 hover:bg-white/20 backdrop-blur-sm text-lg px-8 py-6">
-                  List Your Venue
-                </Button>
-              </Link>
+              {/* Hide "Sign Up" for logged-in players */}
+              {!isPlayer && (
+                <Link href="/signup" className="w-full sm:w-auto">
+                  <Button size="lg" variant="outline" className="w-full sm:w-auto border-2 border-white/30 bg-white/10 hover:bg-white/20 backdrop-blur-sm text-lg px-8 py-6">
+                    Sign Up
+                  </Button>
+                </Link>
+              )}
             </div>
 
             {/* Trust Indicators */}

@@ -25,6 +25,105 @@ export function OwnerBookingsClient({ initialBookings }: OwnerBookingsClientProp
   const [confirmingBookingId, setConfirmingBookingId] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
 
+  // Helper function to check if booking start time has passed
+  const isBookingStartTimePassed = (bookingDate: string, startTime: string): boolean => {
+    try {
+      const now = new Date();
+      const bookingDateTime = new Date(`${bookingDate}T${startTime}`);
+      return bookingDateTime < now;
+    } catch (error) {
+      console.error('Error checking booking time:', error);
+      return false;
+    }
+  };
+
+  // Helper function to check if booking end time has passed
+  const isBookingEndTimePassed = (bookingDate: string, endTime: string): boolean => {
+    try {
+      const now = new Date();
+      const bookingDateTime = new Date(`${bookingDate}T${endTime}`);
+      return bookingDateTime < now;
+    } catch (error) {
+      console.error('Error checking booking time:', error);
+      return false;
+    }
+  };
+
+  // Helper function to get effective status based on time
+  const getEffectiveStatus = (booking: any) => {
+    const startTimePassed = isBookingStartTimePassed(booking.booking_date, booking.start_time);
+    const endTimePassed = isBookingEndTimePassed(booking.booking_date, booking.end_time);
+    
+    // Pending bookings with passed start time should be hidden (expired/auto-deleted)
+    if (booking.status === 'pending' && startTimePassed) {
+      return 'expired';
+    }
+    
+    // Confirmed bookings with passed END time should be treated as completed
+    if (booking.status === 'confirmed' && endTimePassed) {
+      return 'completed';
+    }
+    
+    // Return actual status for all other cases
+    return booking.status;
+  };
+
+  // Helper function to delete expired pending bookings
+  const deleteExpiredPendingBookings = async (bookingsToCheck: any[]) => {
+    const expiredBookingIds = bookingsToCheck
+      .filter(booking => {
+        const effectiveStatus = getEffectiveStatus(booking);
+        return effectiveStatus === 'expired';
+      })
+      .map(booking => booking.id);
+
+    if (expiredBookingIds.length > 0) {
+      try {
+        const { error } = await supabase
+          .from('bookings')
+          .delete()
+          .in('id', expiredBookingIds);
+
+        if (error) {
+          console.error('Error deleting expired bookings:', error);
+        }
+      } catch (error) {
+        console.error('Error deleting expired bookings:', error);
+      }
+    }
+  };
+
+  // Helper function to auto-complete confirmed bookings with passed end time
+  const autoCompleteBookings = async (bookingsToCheck: any[]) => {
+    const bookingsToComplete = bookingsToCheck
+      .filter(booking => {
+        // Only update if status is still 'confirmed' in DB but end time has passed
+        return booking.status === 'confirmed' && isBookingEndTimePassed(booking.booking_date, booking.end_time);
+      })
+      .map(booking => booking.id);
+
+    if (bookingsToComplete.length > 0) {
+      try {
+        const { error } = await supabase
+          .from('bookings')
+          .update({ status: 'completed' })
+          .in('id', bookingsToComplete);
+
+        if (error) {
+          console.error('Error auto-completing bookings:', error);
+        }
+      } catch (error) {
+        console.error('Error auto-completing bookings:', error);
+      }
+    }
+  };
+
+  // Filter bookings to exclude expired pending bookings
+  const visibleBookings = bookings.filter(booking => {
+    const effectiveStatus = getEffectiveStatus(booking);
+    return effectiveStatus !== 'expired';
+  });
+
   const fetchBookings = async () => {
     try {
       setLoading(true);
@@ -59,6 +158,13 @@ export function OwnerBookingsClient({ initialBookings }: OwnerBookingsClientProp
       if (error) {
         console.error('Error fetching bookings:', error);
         throw error;
+      }
+
+      // Auto-complete confirmed bookings with passed end time
+      if (bookingsData && bookingsData.length > 0) {
+        await autoCompleteBookings(bookingsData);
+        // Delete expired pending bookings from database
+        await deleteExpiredPendingBookings(bookingsData);
       }
 
       setBookings(bookingsData || []);
@@ -143,8 +249,11 @@ export function OwnerBookingsClient({ initialBookings }: OwnerBookingsClientProp
     }
   };
 
-  const totalRevenue = bookings
-    .filter(b => b.status === 'confirmed' || b.status === 'completed')
+  const totalRevenue = visibleBookings
+    .filter(b => {
+      const effectiveStatus = getEffectiveStatus(b);
+      return effectiveStatus === 'confirmed' || effectiveStatus === 'completed';
+    })
     .reduce((sum, b) => sum + (b.total_price || 0), 0);
 
   return (
@@ -164,7 +273,7 @@ export function OwnerBookingsClient({ initialBookings }: OwnerBookingsClientProp
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Total Bookings</p>
-                  <h3 className="text-3xl font-bold mt-2">{bookings.length}</h3>
+                  <h3 className="text-3xl font-bold mt-2">{visibleBookings.length}</h3>
                 </div>
                 <Calendar className="w-8 h-8 text-primary" />
               </div>
@@ -174,7 +283,7 @@ export function OwnerBookingsClient({ initialBookings }: OwnerBookingsClientProp
                 <div>
                   <p className="text-sm text-muted-foreground">Confirmed</p>
                   <h3 className="text-3xl font-bold mt-2 text-green-500">
-                    {bookings.filter(b => b.status === 'confirmed').length}
+                    {visibleBookings.filter(b => getEffectiveStatus(b) === 'confirmed').length}
                   </h3>
                 </div>
                 <Calendar className="w-8 h-8 text-green-500" />
@@ -185,7 +294,7 @@ export function OwnerBookingsClient({ initialBookings }: OwnerBookingsClientProp
                 <div>
                   <p className="text-sm text-muted-foreground">Pending</p>
                   <h3 className="text-3xl font-bold mt-2 text-yellow-500">
-                    {bookings.filter(b => b.status === 'pending').length}
+                    {visibleBookings.filter(b => getEffectiveStatus(b) === 'pending').length}
                   </h3>
                 </div>
                 <Clock className="w-8 h-8 text-yellow-500" />
@@ -208,10 +317,10 @@ export function OwnerBookingsClient({ initialBookings }: OwnerBookingsClientProp
           <Card className="p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold">All Bookings</h2>
-              <Badge variant="secondary">{bookings.length} total</Badge>
+              <Badge variant="secondary">{visibleBookings.length} total</Badge>
             </div>
 
-            {bookings.length === 0 ? (
+            {visibleBookings.length === 0 ? (
               <div className="text-center py-12">
                 <Calendar className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
                 <h3 className="text-lg font-semibold mb-2">No bookings yet</h3>
@@ -221,15 +330,17 @@ export function OwnerBookingsClient({ initialBookings }: OwnerBookingsClientProp
               </div>
             ) : (
               <div className="space-y-4">
-                {bookings.map((booking) => (
+                {visibleBookings.map((booking) => {
+                  const effectiveStatus = getEffectiveStatus(booking);
+                  return (
                   <Card key={booking.id} className="p-4 border">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-3">
                           <div>
                             <h3 className="font-bold text-lg">{booking.venues?.name || 'Unknown Venue'}</h3>
-                            <Badge className={getStatusBadge(booking.status)}>
-                              {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+                            <Badge className={getStatusBadge(effectiveStatus)}>
+                              {effectiveStatus.charAt(0).toUpperCase() + effectiveStatus.slice(1)}
                             </Badge>
                           </div>
                         </div>
@@ -287,7 +398,7 @@ export function OwnerBookingsClient({ initialBookings }: OwnerBookingsClientProp
 
                       {/* Action Buttons */}
                       <div className="flex gap-2 ml-4">
-                        {booking.status === 'pending' && (
+                        {effectiveStatus === 'pending' && (
                           <Button
                             size="sm"
                             onClick={() => handleConfirmBooking(booking.id)}
@@ -308,7 +419,8 @@ export function OwnerBookingsClient({ initialBookings }: OwnerBookingsClientProp
                       </div>
                     </div>
                   </Card>
-                ))}
+                  );
+                })}
               </div>
             )}
           </Card>

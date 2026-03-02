@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { Footer } from "@/components/landing/Footer";
-import { Mail, Phone, Menu } from "lucide-react";
+import { Mail, Phone, Menu, LogOut } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -39,6 +39,9 @@ export function ContactUsPageClient() {
     if (cachedRole) {
       setUserRole(cachedRole);
       setAuthLoading(false);
+    } else {
+      // If no cached role, show navigation after short delay to prevent long loading
+      setTimeout(() => setAuthLoading(false), 300);
     }
     
     checkUser();
@@ -116,6 +119,22 @@ export function ContactUsPageClient() {
     return 'Sign In';
   };
 
+  const isLoggedIn = !!user;
+  const isPlayer = userRole === 'player';
+  const isOwner = userRole === 'venue_owner';
+
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut();
+      setUser(null);
+      setUserRole(null);
+      localStorage.removeItem('user_role');
+      window.location.href = '/';
+    } catch (error) {
+      console.error('Sign out error:', error);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -179,13 +198,43 @@ export function ContactUsPageClient() {
             <Link href="/contact">
               <Button variant="ghost" className="text-primary hover:text-primary">Contact Us</Button>
             </Link>
-            <Link href="/signup">
-              <Button variant="outline">List Your Venue</Button>
-            </Link>
-            {mounted && (
-              <Link href={getDashboardLink()}>
-                <Button suppressHydrationWarning>{getDashboardLabel()}</Button>
-              </Link>
+
+            {!authLoading && (
+              <>
+                {!isPlayer && !isLoggedIn && (
+                  <Link href="/signup">
+                    <Button variant="outline" size="sm">Sign Up</Button>
+                  </Link>
+                )}
+
+                {isLoggedIn ? (
+                  <>
+                    {isPlayer && (
+                      <Link href="/user/bookings">
+                        <Button variant="outline" size="sm">My Bookings</Button>
+                      </Link>
+                    )}
+                    {isOwner && (
+                      <Link href="/owner/dashboard">
+                        <Button size="sm">Dashboard</Button>
+                      </Link>
+                    )}
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={handleSignOut}
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      <LogOut className="w-4 h-4 mr-1" />
+                      Sign Out
+                    </Button>
+                  </>
+                ) : (
+                  <Link href={getDashboardLink()}>
+                    <Button size="sm" suppressHydrationWarning>{getDashboardLabel()}</Button>
+                  </Link>
+                )}
+              </>
             )}
           </div>
           <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
@@ -217,17 +266,52 @@ export function ContactUsPageClient() {
                   </Button>
                 </Link>
                 <div className="border-t pt-4 mt-4">
-                  <Link href="/signup" onClick={() => setMobileMenuOpen(false)}>
-                    <Button variant="outline" className="w-full mb-3 text-lg">
-                      List Your Venue
-                    </Button>
-                  </Link>
-                  {mounted && (
-                    <Link href={getDashboardLink()} onClick={() => setMobileMenuOpen(false)}>
-                      <Button className="w-full text-lg" suppressHydrationWarning>
-                        {getDashboardLabel()}
-                      </Button>
-                    </Link>
+                  {!authLoading && (
+                    <>
+                      {!isPlayer && !isLoggedIn && (
+                        <Link href="/signup" onClick={() => setMobileMenuOpen(false)}>
+                          <Button variant="outline" className="w-full mb-3 text-lg">
+                            Sign Up
+                          </Button>
+                        </Link>
+                      )}
+
+                      {isLoggedIn ? (
+                        <>
+                          {isPlayer && (
+                            <Link href="/user/bookings" onClick={() => setMobileMenuOpen(false)}>
+                              <Button variant="outline" className="w-full mb-3 text-lg">
+                                My Bookings
+                              </Button>
+                            </Link>
+                          )}
+                          {isOwner && (
+                            <Link href="/owner/dashboard" onClick={() => setMobileMenuOpen(false)}>
+                              <Button className="w-full mb-3 text-lg">
+                                Dashboard
+                              </Button>
+                            </Link>
+                          )}
+                          <Button 
+                            variant="ghost" 
+                            className="w-full text-lg text-muted-foreground hover:text-destructive"
+                            onClick={() => {
+                              setMobileMenuOpen(false);
+                              handleSignOut();
+                            }}
+                          >
+                            <LogOut className="w-5 h-5 mr-2" />
+                            Sign Out
+                          </Button>
+                        </>
+                      ) : (
+                        <Link href={getDashboardLink()} onClick={() => setMobileMenuOpen(false)}>
+                          <Button className="w-full text-lg" suppressHydrationWarning>
+                            {getDashboardLabel()}
+                          </Button>
+                        </Link>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
