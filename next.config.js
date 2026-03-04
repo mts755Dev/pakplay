@@ -4,42 +4,16 @@ const nextConfig = {
   
   // Image optimization
   images: {
+    // Allow ALL https images — venue owners upload from any source
+    // (Google, Facebook, stock photo sites, etc.) so we can't predict hostnames
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: '**.supabase.co',
+        hostname: '**',
       },
       {
-        protocol: 'https',
-        hostname: 'images.unsplash.com',
-      },
-      {
-        protocol: 'https',
-        hostname: 'lh3.googleusercontent.com',
-      },
-      {
-        protocol: 'https',
-        hostname: 'lh5.googleusercontent.com',
-      },
-      {
-        protocol: 'https',
-        hostname: 'www.shutterstock.com',
-      },
-      {
-        protocol: 'https',
-        hostname: 'images.pexels.com',
-      },
-      {
-        protocol: 'https',
-        hostname: 'cdn.pixabay.com',
-      },
-      {
-        protocol: 'https',
-        hostname: '**.gstatic.com',
-      },
-      {
-        protocol: 'https',
-        hostname: '**.googleusercontent.com',
+        protocol: 'http',
+        hostname: '**',
       },
     ],
     formats: ['image/avif', 'image/webp'],

@@ -145,6 +145,7 @@ export async function fetchFeaturedVenues(limit: number = 9): Promise<VenueWithD
  */
 export async function fetchInitialVenues(limit: number = 12) {
   try {
+    // Single query with embedded relations — 1 HTTP round-trip instead of 4
     const { data: venues, error, count } = await supabaseServer
       .from('venues')
       .select(`
@@ -152,7 +153,10 @@ export async function fetchInitialVenues(limit: number = 12) {
         sport_type, price_per_hour, opening_time, closing_time, is_24_7, created_at,
         owner_id, description, amenities, whatsapp_number, google_maps_url, is_featured,
         status, featured, rating, total_bookings, updated_at,
-        logo_url, tagline, facebook_url, instagram_url
+        logo_url, tagline, facebook_url, instagram_url,
+        venue_photos(id, venue_id, photo_url, is_primary, display_order, created_at),
+        venue_reviews(venue_id, rating),
+        special_offers(id, venue_id, offer_name, description, original_price, offer_price, discount_percentage, valid_from, valid_until, is_active, created_at, updated_at)
       `, { count: 'exact' })
       .eq('status', 'approved')
       .order('created_at', { ascending: false })
@@ -166,66 +170,30 @@ export async function fetchInitialVenues(limit: number = 12) {
       return { venues: [], totalCount: 0 };
     }
 
-    const venueIds = venues.map(v => v.id);
-    if (venueIds.length === 0) {
-      return { venues: [], totalCount: count || 0 };
-    }
+    const now = new Date().toISOString();
 
-    const [photosResult, offersResult, reviewsResult] = await Promise.all([
-      supabaseServer
-        .from('venue_photos')
-        .select('*')
-        .in('venue_id', venueIds)
-        .order('display_order', { ascending: true }),
-      supabaseServer
-        .from('special_offers')
-        .select('*')
-        .in('venue_id', venueIds)
-        .eq('is_active', true)
-        .lte('valid_from', new Date().toISOString())
-        .gte('valid_until', new Date().toISOString()),
-      supabaseServer
-        .from('venue_reviews')
-        .select('venue_id, rating')
-        .in('venue_id', venueIds)
-    ]);
+    const venuesWithData = venues.map((venue: any) => {
+      const photos: VenuePhoto[] = venue.venue_photos || [];
+      const reviews: { venue_id: string; rating: number }[] = venue.venue_reviews || [];
 
-    const photosMap = new Map<string, VenuePhoto[]>();
-    (photosResult.data || []).forEach(photo => {
-      if (!photosMap.has(photo.venue_id)) {
-        photosMap.set(photo.venue_id, []);
-      }
-      photosMap.get(photo.venue_id)!.push(photo);
-    });
+      // Find active offer (filter by is_active + date range in JS — avoids extra query)
+      const activeOffer = (venue.special_offers || []).find((o: any) =>
+        o.is_active && o.valid_from <= now && o.valid_until >= now
+      ) || null;
 
-    const offersMap = new Map<string, SpecialOffer>();
-    (offersResult.data || []).forEach(offer => {
-      if (!offersMap.has(offer.venue_id)) {
-        offersMap.set(offer.venue_id, offer);
-      }
-    });
+      // Calculate average rating
+      const totalRating = reviews.reduce((acc, r) => acc + r.rating, 0);
+      const avgRating = reviews.length > 0 ? totalRating / reviews.length : 0;
 
-    const ratingsMap = new Map<string, { total: number; count: number }>();
-    (reviewsResult.data || []).forEach(review => {
-      if (!ratingsMap.has(review.venue_id)) {
-        ratingsMap.set(review.venue_id, { total: 0, count: 0 });
-      }
-      const current = ratingsMap.get(review.venue_id)!;
-      current.total += review.rating;
-      current.count += 1;
-    });
-
-    const venuesWithData = venues.map(venue => {
-      const photos = photosMap.get(venue.id) || [];
-      const offer = offersMap.get(venue.id);
-      const rating = ratingsMap.get(venue.id);
+      // Remove embedded relations from the spread, add processed fields
+      const { venue_photos, venue_reviews, special_offers, ...venueBase } = venue;
 
       return {
-        ...venue,
+        ...venueBase,
         venue_photos: photos,
-        active_offer: offer || null,
-        calculated_rating: rating ? rating.total / rating.count : 0,
-        review_count: rating ? rating.count : 0,
+        active_offer: activeOffer,
+        calculated_rating: avgRating,
+        review_count: reviews.length,
       };
     });
 

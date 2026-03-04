@@ -185,6 +185,7 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
   const [isInitialized, setIsInitialized] = useState(false);
   const [hasLoadedInitial, setHasLoadedInitial] = useState(hasServerData); // Track if initial data loaded
   const abortControllerRef = useRef<AbortController | null>(null);
+  const isFirstMount = useRef(true); // Guard against re-fetches during mount
 
   useEffect(() => {
     setMounted(true);
@@ -243,9 +244,20 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
   useEffect(() => {
     if (!isInitialized) return;
     
-    // Skip initial fetch if we have server data and no filters are applied
+    // On first mount with SSR data: never re-fetch unless URL params set filters
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      if (hasServerData) {
+        // Only re-fetch if URL params set a filter that differs from the SSR data
+        const hasUrlFilters = selectedProvince !== "" || selectedCity !== "";
+        if (!hasUrlFilters) {
+          return; // SSR data is fresh, no need to re-fetch
+        }
+      }
+    }
+
+    // Skip if we have SSR data and no filters are applied
     if (hasLoadedInitial && !debouncedSearchTerm && selectedProvince === "" && selectedCity === "" && selectedArea === "" && selectedSubArea === "" && selectedSport === "all" && priceSort === "none" && minPrice === "" && maxPrice === "") {
-      // We have SSR data and no filters, so just use the initial data
       return;
     }
     
@@ -258,16 +270,11 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
       abortControllerRef.current.abort();
     }
     
-    const isFirstFetch = initialLoading;
-    
     setOffset(0);
     setHasMore(true);
+    setIsFiltering(true);
     
-    if (!isFirstFetch) {
-      setIsFiltering(true);
-    }
-    
-    fetchVenues(0, isFirstFetch);
+    fetchVenues(0, false);
   }, [isInitialized, debouncedSearchTerm, selectedProvince, selectedCity, selectedArea, selectedSubArea, selectedSport, priceSort, minPrice, maxPrice]);
 
   useEffect(() => {
