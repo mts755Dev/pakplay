@@ -17,6 +17,7 @@ import { Tables } from "@/integrations/supabase/types";
 import { LocationSelector } from "@/components/LocationSelector";
 import { BannerAd, InFeedAd } from "@/components/ads/AdSenseUnit";
 import ppLogo from "@/assets/pp logo.png";
+import { useAuth } from "@/contexts/AuthContext";
 
 type Venue = Tables<'venues'>;
 type VenuePhoto = Tables<'venue_photos'>;
@@ -174,10 +175,7 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
   const [priceSort, setPriceSort] = useState("none");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
-  const [user, setUser] = useState<any>(null);
-  const [userRole, setUserRole] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
-  const [authLoading, setAuthLoading] = useState(true);
+  const { isLoggedIn, isPlayer, isOwner, userRole, authReady, handleSignOut } = useAuth();
   
   const [offset, setOffset] = useState(hasServerData ? initialVenues.length : 0);
   const observerTarget = useRef<HTMLDivElement>(null);
@@ -188,57 +186,12 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
   const isFirstMount = useRef(true); // Guard against re-fetches during mount
 
   useEffect(() => {
-    setMounted(true);
-    
-    // Load from cache immediately after mount
-    const cachedRole = localStorage.getItem('user_role');
-    if (cachedRole) {
-      setUserRole(cachedRole);
-      setAuthLoading(false); // Show navigation immediately with cached data
-    } else {
-      // If no cached role, show navigation after short delay to prevent long loading
-      setTimeout(() => setAuthLoading(false), 300);
-    }
-    
-    checkUser();
-
-    // Listen to auth changes for real-time updates
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      try {
-        if (session?.user) {
-          setUser(session.user);
-          
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', session.user.id)
-            .single();
-
-          if (profile?.role) {
-            setUserRole(profile.role);
-            localStorage.setItem('user_role', profile.role);
-          }
-        } else {
-          setUser(null);
-          setUserRole(null);
-          localStorage.removeItem('user_role');
-        }
-      } catch (error) {
-        // Handle auth state change errors during logout/navigation
-        console.error('Auth state change error:', error);
-      }
-    });
-    
     const provinceParam = searchParams?.get('province');
     const cityParam = searchParams?.get('city');
     if (provinceParam) setSelectedProvince(provinceParam);
     if (cityParam) setSelectedCity(cityParam);
     
     setIsInitialized(true);
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, []);
 
   useEffect(() => {
@@ -299,33 +252,6 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
     };
   }, [hasMore, loadingMore, initialLoading, isFiltering, offset]);
 
-  const checkUser = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        setUser(session.user);
-        
-        // Fetch fresh role from database
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', session.user.id)
-          .single();
-
-        if (profile?.role) {
-          setUserRole(profile.role);
-          localStorage.setItem('user_role', profile.role);
-        }
-      } else {
-        localStorage.removeItem('user_role');
-      }
-    } catch (error) {
-      // Silent fail
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
   const getDashboardLink = () => {
     if (userRole === 'admin') return '/admin/dashboard';
     if (userRole === 'venue_owner') return '/owner/dashboard';
@@ -336,22 +262,6 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
     if (userRole === 'admin') return 'Admin Dashboard';
     if (userRole === 'venue_owner') return 'Dashboard';
     return 'Sign In';
-  };
-
-  const isLoggedIn = !!user;
-  const isPlayer = userRole === 'player';
-  const isOwner = userRole === 'venue_owner';
-
-  const handleSignOut = async () => {
-    try {
-      await supabase.auth.signOut();
-      setUser(null);
-      setUserRole(null);
-      localStorage.removeItem('user_role');
-      window.location.href = '/';
-    } catch (error) {
-      console.error('Sign out error:', error);
-    }
   };
 
   const fetchVenues = async (fetchOffset: number, isInitialFetch: boolean = false) => {
@@ -609,7 +519,7 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
               <Button variant="ghost">Contact Us</Button>
             </Link>
 
-            {!authLoading && (
+            {authReady && (
               <>
                 {/* Show "Sign Up" only when NOT logged in as player */}
                 {!isPlayer && !isLoggedIn && (
@@ -677,7 +587,7 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
                   <Button variant="ghost" className="w-full justify-start">Contact Us</Button>
                 </Link>
 
-                {!authLoading && (
+                {authReady && (
                   <>
                     {/* Show "Sign Up" only when NOT logged in as player */}
                     {!isPlayer && !isLoggedIn && (

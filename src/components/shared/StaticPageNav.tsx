@@ -4,9 +4,9 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Menu, LogOut } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import ppLogo from "@/assets/pp logo.png";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface StaticPageNavProps {
   activePage?: string;
@@ -14,86 +14,7 @@ interface StaticPageNavProps {
 
 export function StaticPageNav({ activePage }: StaticPageNavProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [user, setUser] = useState<any>(null);
-  const [userRole, setUserRole] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-    
-    // Load from cache immediately after mount
-    const cachedRole = localStorage.getItem('user_role');
-    if (cachedRole) {
-      setUserRole(cachedRole);
-      setLoading(false);
-    } else {
-      // If no cached role, show navigation after short delay to prevent long loading
-      setTimeout(() => setLoading(false), 300);
-    }
-    
-    checkUser();
-
-    // Listen to auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      try {
-        if (session?.user) {
-          setUser(session.user);
-          
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', session.user.id)
-            .single();
-
-          if (profile?.role) {
-            setUserRole(profile.role);
-            localStorage.setItem('user_role', profile.role);
-          }
-        } else {
-          setUser(null);
-          setUserRole(null);
-          localStorage.removeItem('user_role');
-        }
-        setLoading(false);
-      } catch (error) {
-        // Handle auth state change errors during logout/navigation
-        console.error('Auth state change error:', error);
-        setLoading(false);
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
-
-  const checkUser = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        setUser(session.user);
-        
-        // Fetch fresh role from database
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', session.user.id)
-          .single();
-
-        if (profile?.role) {
-          setUserRole(profile.role);
-          localStorage.setItem('user_role', profile.role);
-        }
-      } else {
-        localStorage.removeItem('user_role');
-      }
-    } catch (error) {
-      // Silent fail
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { user, userRole, isLoggedIn, isPlayer, isOwner, authReady, handleSignOut } = useAuth();
 
   const getDashboardLink = () => {
     if (userRole === 'admin') return '/admin/dashboard';
@@ -105,22 +26,6 @@ export function StaticPageNav({ activePage }: StaticPageNavProps) {
     if (userRole === 'admin') return 'Admin Dashboard';
     if (userRole === 'venue_owner') return 'Dashboard';
     return 'Sign In';
-  };
-
-  const isLoggedIn = !!user;
-  const isPlayer = userRole === 'player';
-  const isOwner = userRole === 'venue_owner';
-
-  const handleSignOut = async () => {
-    try {
-      await supabase.auth.signOut();
-      setUser(null);
-      setUserRole(null);
-      localStorage.removeItem('user_role');
-      window.location.href = '/';
-    } catch (error) {
-      console.error('Sign out error:', error);
-    }
   };
 
   const isActive = (page: string) => activePage === page;
@@ -158,7 +63,7 @@ export function StaticPageNav({ activePage }: StaticPageNavProps) {
             </Button>
           </Link>
 
-          {!loading && (
+          {authReady && (
             <>
               {!isPlayer && !isLoggedIn && (
                 <Link href="/signup">
@@ -244,7 +149,7 @@ export function StaticPageNav({ activePage }: StaticPageNavProps) {
                 </Button>
               </Link>
               <div className="border-t pt-4 mt-4">
-                {!loading && (
+                {authReady && (
                   <>
                     {!isPlayer && !isLoggedIn && (
                       <Link href="/signup" onClick={() => setMobileMenuOpen(false)}>
@@ -299,5 +204,3 @@ export function StaticPageNav({ activePage }: StaticPageNavProps) {
     </nav>
   );
 }
-
-

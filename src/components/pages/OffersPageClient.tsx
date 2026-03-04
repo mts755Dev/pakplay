@@ -16,6 +16,7 @@ import { Tables } from "@/integrations/supabase/types";
 import { LocationSelector } from "@/components/LocationSelector";
 import { BannerAd, InFeedAd } from "@/components/ads/AdSenseUnit";
 import ppLogo from "@/assets/pp logo.png";
+import { useAuth } from "@/contexts/AuthContext";
 
 type Venue = Tables<'venues'>;
 type VenuePhoto = Tables<'venue_photos'>;
@@ -172,10 +173,7 @@ export default function OffersPageClient({ initialOffers = [], initialTotalCount
   const [priceSort, setPriceSort] = useState("none");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
-  const [user, setUser] = useState<any>(null);
-  const [userRole, setUserRole] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
-  const [authLoading, setAuthLoading] = useState(true);
+  const { isLoggedIn, isPlayer, isOwner, userRole, authReady, handleSignOut } = useAuth();
   
   const [offset, setOffset] = useState(hasServerData ? initialOffers.length : 0);
   const observerTarget = useRef<HTMLDivElement>(null);
@@ -183,61 +181,32 @@ export default function OffersPageClient({ initialOffers = [], initialTotalCount
   const [isInitialized, setIsInitialized] = useState(false);
   const [hasLoadedInitial, setHasLoadedInitial] = useState(hasServerData);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const isFirstMount = useRef(true);
 
   useEffect(() => {
-    setMounted(true);
-    
-    const cachedRole = localStorage.getItem('user_role');
-    if (cachedRole) {
-      setUserRole(cachedRole);
-      setAuthLoading(false); // Show navigation immediately with cached data
-    } else {
-      // If no cached role, show navigation after short delay to prevent long loading
-      setTimeout(() => setAuthLoading(false), 300);
-    }
-    
-    checkUser();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      try {
-        if (session?.user) {
-          setUser(session.user);
-          
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', session.user.id)
-            .single();
-
-          if (profile?.role) {
-            setUserRole(profile.role);
-            localStorage.setItem('user_role', profile.role);
-          }
-        } else {
-          setUser(null);
-          setUserRole(null);
-          localStorage.removeItem('user_role');
-        }
-      } catch (error) {
-        console.error('Auth state change error:', error);
-      }
-    });
-    
     const provinceParam = searchParams?.get('province');
     const cityParam = searchParams?.get('city');
     if (provinceParam) setSelectedProvince(provinceParam);
     if (cityParam) setSelectedCity(cityParam);
     
     setIsInitialized(true);
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, []);
 
   useEffect(() => {
     if (!isInitialized) return;
     
+    // On first mount with SSR data: skip client-side fetch unless URL params set filters
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      if (hasServerData) {
+        const hasUrlFilters = selectedProvince !== "" || selectedCity !== "";
+        if (!hasUrlFilters) {
+          return; // SSR data is fresh, no need to re-fetch
+        }
+      }
+    }
+
+    // Skip if we have SSR data and no filters are applied
     if (hasLoadedInitial && !debouncedSearchTerm && selectedProvince === "" && selectedCity === "" && selectedArea === "" && selectedSubArea === "" && selectedSport === "all" && priceSort === "none" && minPrice === "" && maxPrice === "") {
       setHasLoadedInitial(false);
       return;
@@ -247,16 +216,11 @@ export default function OffersPageClient({ initialOffers = [], initialTotalCount
       abortControllerRef.current.abort();
     }
     
-    const isFirstFetch = initialLoading;
-    
     setOffset(0);
     setHasMore(true);
+    setIsFiltering(true);
     
-    if (!isFirstFetch) {
-      setIsFiltering(true);
-    }
-    
-    fetchOffers(0, isFirstFetch);
+    fetchOffers(0, false);
   }, [isInitialized, debouncedSearchTerm, selectedProvince, selectedCity, selectedArea, selectedSubArea, selectedSport, priceSort, minPrice, maxPrice]);
 
   useEffect(() => {
@@ -281,32 +245,6 @@ export default function OffersPageClient({ initialOffers = [], initialTotalCount
     };
   }, [hasMore, loadingMore, initialLoading, isFiltering, offset]);
 
-  const checkUser = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        setUser(session.user);
-        
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', session.user.id)
-          .single();
-
-        if (profile?.role) {
-          setUserRole(profile.role);
-          localStorage.setItem('user_role', profile.role);
-        }
-      } else {
-        localStorage.removeItem('user_role');
-      }
-    } catch (error) {
-      // Silent fail
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
   const getDashboardLink = () => {
     if (userRole === 'admin') return '/admin/dashboard';
     if (userRole === 'venue_owner') return '/owner/dashboard';
@@ -317,22 +255,6 @@ export default function OffersPageClient({ initialOffers = [], initialTotalCount
     if (userRole === 'admin') return 'Admin Dashboard';
     if (userRole === 'venue_owner') return 'Dashboard';
     return 'Sign In';
-  };
-
-  const isLoggedIn = !!user;
-  const isPlayer = userRole === 'player';
-  const isOwner = userRole === 'venue_owner';
-
-  const handleSignOut = async () => {
-    try {
-      await supabase.auth.signOut();
-      setUser(null);
-      setUserRole(null);
-      localStorage.removeItem('user_role');
-      window.location.href = '/';
-    } catch (error) {
-      console.error('Sign out error:', error);
-    }
   };
 
   const fetchOffers = async (fetchOffset: number, isInitialFetch: boolean = false) => {
@@ -583,7 +505,7 @@ export default function OffersPageClient({ initialOffers = [], initialTotalCount
               <Button variant="ghost">Contact Us</Button>
             </Link>
 
-            {!authLoading && (
+            {authReady && (
               <>
                 {!isPlayer && !isLoggedIn && (
                   <Link href="/signup">
@@ -647,7 +569,7 @@ export default function OffersPageClient({ initialOffers = [], initialTotalCount
                   <Button variant="ghost" className="w-full justify-start">Contact Us</Button>
                 </Link>
 
-                {!authLoading && (
+                {authReady && (
                   <>
                     {!isPlayer && !isLoggedIn && (
                       <Link href="/signup">

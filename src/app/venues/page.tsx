@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import { Suspense } from "react";
 import VenuesPageClient from "@/components/pages/VenuesPageClient";
 import { fetchInitialVenues } from "@/lib/server-actions";
 
@@ -16,10 +17,12 @@ export default async function VenuesPage() {
   const { venues, totalCount } = await fetchInitialVenues(12);
 
   return (
-    <VenuesPageClient 
-      initialVenues={venues}
-      initialTotalCount={totalCount}
-    />
+    <Suspense>
+      <VenuesPageClient 
+        initialVenues={venues}
+        initialTotalCount={totalCount}
+      />
+    </Suspense>
   );
 }
 

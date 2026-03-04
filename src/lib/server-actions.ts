@@ -12,6 +12,21 @@ type VenuePhoto = Tables<'venue_photos'>;
 type VenueReview = Tables<'venue_reviews'>;
 type SpecialOffer = Tables<'special_offers'>;
 
+// ==================== IN-MEMORY SERVER CACHE ====================
+// Caches DB results in the Node.js process memory so repeated navigations
+// (especially in dev mode where ISR is inactive) return data near-instantly.
+const serverCache = new Map<string, { data: any; expires: number }>();
+
+async function withCache<T>(key: string, ttlSeconds: number, fetcher: () => Promise<T>): Promise<T> {
+  const entry = serverCache.get(key);
+  if (entry && entry.expires > Date.now()) {
+    return entry.data as T;
+  }
+  const data = await fetcher();
+  serverCache.set(key, { data, expires: Date.now() + ttlSeconds * 1000 });
+  return data;
+}
+
 // ==================== VENUE DATA FETCHING ====================
 
 export interface VenueWithData extends Venue {
@@ -141,9 +156,13 @@ export async function fetchFeaturedVenues(limit: number = 9): Promise<VenueWithD
 }
 
 /**
- * Fetch initial venues for browse page
+ * Fetch initial venues for browse page (cached 60s in-memory)
  */
 export async function fetchInitialVenues(limit: number = 12) {
+  return withCache(`initial-venues-${limit}`, 60, () => _fetchInitialVenuesImpl(limit));
+}
+
+async function _fetchInitialVenuesImpl(limit: number) {
   try {
     // Single query with embedded relations — 1 HTTP round-trip instead of 4
     const { data: venues, error, count } = await supabaseServer
@@ -208,20 +227,26 @@ export async function fetchInitialVenues(limit: number = 12) {
 }
 
 /**
- * Fetch initial offers for offers page
+ * Fetch initial offers for offers page (cached 60s in-memory)
  */
 export async function fetchInitialOffers(limit: number = 12) {
+  return withCache(`initial-offers-${limit}`, 60, () => _fetchInitialOffersImpl(limit));
+}
+
+async function _fetchInitialOffersImpl(limit: number) {
   try {
     const { data: offers, error, count } = await supabaseServer
       .from('special_offers')
       .select(`
         *,
         venues!inner(
-          id, owner_id, name, slug, subdomain, sport_type, city, province, area, sub_area,
+          id, owner_id, name, slug, sport_type, city, province, area, sub_area,
           address, description, amenities, price_per_hour, opening_time, closing_time,
-          is_24_7, whatsapp_number, google_maps_url, is_featured, status,
+          is_24_7, whatsapp_number, google_maps_url, status,
           featured, rating, total_bookings, logo_url, tagline, facebook_url,
-          instagram_url, created_at, updated_at
+          instagram_url, created_at, updated_at,
+          venue_photos(id, venue_id, photo_url, is_primary, display_order),
+          venue_reviews(venue_id, rating)
         )
       `, { count: 'exact' })
       .eq('is_active', true)
@@ -231,55 +256,25 @@ export async function fetchInitialOffers(limit: number = 12) {
       .range(0, limit - 1);
 
     if (error || !offers) {
+      console.error('Error fetching initial offers:', error);
       return { offers: [], totalCount: 0 };
     }
 
-    const venueIds = offers.map((o: any) => o.venues.id);
-    if (venueIds.length === 0) {
-      return { offers: offers || [], totalCount: count || 0 };
-    }
-
-    const [photosResult, reviewsResult] = await Promise.all([
-      supabaseServer
-        .from('venue_photos')
-        .select('*')
-        .in('venue_id', venueIds)
-        .order('display_order', { ascending: true }),
-      supabaseServer
-        .from('venue_reviews')
-        .select('venue_id, rating')
-        .in('venue_id', venueIds)
-    ]);
-
-    const photosMap = new Map<string, VenuePhoto[]>();
-    (photosResult.data || []).forEach(photo => {
-      if (!photosMap.has(photo.venue_id)) {
-        photosMap.set(photo.venue_id, []);
-      }
-      photosMap.get(photo.venue_id)!.push(photo);
-    });
-
-    const ratingsMap = new Map<string, { total: number; count: number }>();
-    (reviewsResult.data || []).forEach(review => {
-      if (!ratingsMap.has(review.venue_id)) {
-        ratingsMap.set(review.venue_id, { total: 0, count: 0 });
-      }
-      const current = ratingsMap.get(review.venue_id)!;
-      current.total += review.rating;
-      current.count += 1;
-    });
-
     const offersWithData = offers.map((offer: any) => {
-      const photos = photosMap.get(offer.venues.id) || [];
-      const rating = ratingsMap.get(offer.venues.id);
+      const venue = offer.venues;
+      const photos = venue.venue_photos || [];
+      const reviews = venue.venue_reviews || [];
+      const calculatedRating = reviews.length > 0
+        ? reviews.reduce((acc: number, r: any) => acc + r.rating, 0) / reviews.length
+        : 0;
 
       return {
         ...offer,
         venues: {
-          ...offer.venues,
+          ...venue,
           venue_photos: photos,
-          calculated_rating: rating ? rating.total / rating.count : 0,
-          review_count: rating ? rating.count : 0,
+          calculated_rating: calculatedRating,
+          review_count: reviews.length,
         },
       };
     });
