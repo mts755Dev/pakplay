@@ -148,7 +148,7 @@ export async function fetchInitialVenues(limit: number = 12) {
     const { data: venues, error, count } = await supabaseServer
       .from('venues')
       .select(`
-        id, name, slug, address, city, province, area, sub_area,
+        id, name, slug, subdomain, address, city, province, area, sub_area,
         sport_type, price_per_hour, opening_time, closing_time, is_24_7, created_at,
         owner_id, description, amenities, whatsapp_number, google_maps_url, is_featured,
         status, featured, rating, total_bookings, updated_at,
@@ -249,7 +249,7 @@ export async function fetchInitialOffers(limit: number = 12) {
       .select(`
         *,
         venues!inner(
-          id, owner_id, name, slug, sport_type, city, province, area, sub_area,
+          id, owner_id, name, slug, subdomain, sport_type, city, province, area, sub_area,
           address, description, amenities, price_per_hour, opening_time, closing_time,
           is_24_7, whatsapp_number, google_maps_url, is_featured, status,
           featured, rating, total_bookings, logo_url, tagline, facebook_url,

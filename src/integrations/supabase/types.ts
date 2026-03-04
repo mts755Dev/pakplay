@@ -495,6 +495,41 @@ export type Database = {
           }
         ]
       }
+      venue_loyalty_tiers: {
+        Row: {
+          id: string
+          venue_id: string
+          tier_name: string
+          min_bookings: number
+          discount_percent: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          venue_id: string
+          tier_name: string
+          min_bookings: number
+          discount_percent: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          venue_id?: string
+          tier_name?: string
+          min_bookings?: number
+          discount_percent?: number
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "venue_loyalty_tiers_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
     }
     Views: {
       [_ in never]: never
