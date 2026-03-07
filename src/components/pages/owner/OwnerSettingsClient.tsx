@@ -10,11 +10,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Lock, AlertTriangle, Globe, Copy, Check, ExternalLink } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export function OwnerSettingsClient() {
   const router = useRouter();
+  const { user: authUser, userRole, isLoggedIn, authReady } = useAuth();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [authChecking, setAuthChecking] = useState(true);
@@ -29,44 +31,33 @@ export function OwnerSettingsClient() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    checkUser();
-  }, []);
+    if (!authReady) return;
 
-  const checkUser = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        // Check if user is venue owner
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single();
-
-        if (profile?.role === 'admin') {
-          toast.error("Access denied. Please use admin dashboard.");
-          router.push('/admin/dashboard');
-          return;
-        }
-
-        if (profile?.role !== 'venue_owner') {
-          toast.error("Access denied. Venue owners only.");
-          router.push('/');
-          return;
-        }
-
-        setUser(user);
-        await fetchVenues(user.id);
-      } else {
-        router.push('/signin');
-      }
-    } finally {
+    if (!isLoggedIn || !authUser) {
+      router.push('/signin');
       setAuthChecking(false);
       setLoading(false);
+      return;
     }
-  };
 
-  const fetchVenues = async (userId: string) => {
+    if (userRole === 'admin') {
+      toast.error("Access denied. Please use admin dashboard.");
+      router.push('/admin/dashboard');
+      return;
+    }
+
+    if (userRole !== 'venue_owner') {
+      toast.error("Access denied. Venue owners only.");
+      router.push('/');
+      return;
+    }
+
+    setUser(authUser);
+    setAuthChecking(false);
+    loadVenues(authUser.id);
+  }, [authReady, isLoggedIn, authUser, userRole]);
+
+  const loadVenues = async (userId: string) => {
     try {
       const { data, error } = await supabase
         .from('venues')
@@ -86,6 +77,8 @@ export function OwnerSettingsClient() {
       }
     } catch (error: any) {
       console.error('Error fetching venues:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -148,7 +141,7 @@ export function OwnerSettingsClient() {
       
       // Refresh venues list
       if (user) {
-        await fetchVenues(user.id);
+        await loadVenues(user.id);
       }
     } catch (error: any) {
       toast.error(error.message || "Failed to update subdomain");

@@ -12,7 +12,8 @@ import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { Search, MapPin, Star, Loader2, Clock, Menu, LogOut } from "lucide-react";
 import { useEffect, useState, useRef, useCallback, useMemo, memo } from "react";
-import { supabase } from "@/integrations/supabase/client";
+// Use publicSupabase for data fetching to bypass RLS issues when logged in - ensures identical behavior to logged-out state
+import { publicSupabase as supabase } from "@/integrations/supabase/publicClient";
 import { Tables } from "@/integrations/supabase/types";
 import { LocationSelector } from "@/components/LocationSelector";
 import { BannerAd, InFeedAd } from "@/components/ads/AdSenseUnit";
@@ -274,22 +275,15 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
         setLoadingMore(true);
       }
 
+      // Use single query with embedded relations to avoid multiple round-trips
+      // Use * to avoid column-not-found errors
       let query = supabase
         .from('venues')
         .select(`
-          id,
-          name,
-          slug,
-          address,
-          city,
-          province,
-          area,
-          sub_area,
-          sport_type,
-          price_per_hour,
-          opening_time,
-          closing_time,
-          created_at
+          *,
+          venue_photos(*),
+          venue_reviews(rating),
+          special_offers(*)
         `, { count: 'exact' })
         .eq('status', 'approved');
 
@@ -342,9 +336,38 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
 
       if (error) throw error;
 
-      const venueIds = (data || []).map(v => v.id);
-      
-      if (venueIds.length === 0) {
+      const now = new Date().toISOString();
+
+      const venuesWithData = (data || []).map((venue: any) => {
+        const photos = venue.venue_photos || [];
+        // Sort photos in JS (primary first, then display_order)
+        photos.sort((a: any, b: any) => {
+            if (a.is_primary === b.is_primary) return (a.display_order || 0) - (b.display_order || 0);
+            return a.is_primary ? -1 : 1;
+        });
+
+        const reviews = venue.venue_reviews || [];
+        const calculatedRating = reviews.length > 0
+          ? reviews.reduce((acc: number, r: any) => acc + r.rating, 0) / reviews.length
+          : 0;
+          
+        const activeOffer = (venue.special_offers || []).find((o: any) => 
+            o.is_active && o.valid_from <= now && o.valid_until >= now
+        ) || null;
+
+        // Remove embedded fields from base object to match type
+        const { venue_photos, venue_reviews, special_offers, ...base } = venue;
+
+        return {
+          ...base,
+          venue_photos: photos,
+          active_offer: activeOffer,
+          calculated_rating: calculatedRating,
+          review_count: reviews.length
+        };
+      });
+
+      if (venuesWithData.length === 0) {
         if (fetchOffset === 0) {
           setVenues([]);
           setTotalCount(count || 0);
@@ -355,67 +378,6 @@ export default function VenuesPageClient({ initialVenues = [], initialTotalCount
         setLoadingMore(false);
         return;
       }
-
-      const [photosResult, offersResult, reviewsResult] = await Promise.all([
-        supabase
-          .from('venue_photos')
-          .select('*')
-          .in('venue_id', venueIds)
-          .order('is_primary', { ascending: false })
-          .order('display_order', { ascending: true }),
-        supabase
-          .from('special_offers')
-          .select('*')
-          .in('venue_id', venueIds)
-          .eq('is_active', true)
-          .lte('valid_from', new Date().toISOString())
-          .gte('valid_until', new Date().toISOString())
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('venue_reviews')
-          .select('venue_id, rating')
-          .in('venue_id', venueIds)
-      ]);
-
-      const photosByVenue = new Map<string, VenuePhoto[]>();
-      (photosResult.data || []).forEach((photo: any) => {
-        if (!photosByVenue.has(photo.venue_id)) {
-          photosByVenue.set(photo.venue_id, []);
-        }
-        photosByVenue.get(photo.venue_id)!.push(photo as VenuePhoto);
-      });
-
-      const offersByVenue = new Map();
-      (offersResult.data || []).forEach(offer => {
-        if (!offersByVenue.has(offer.venue_id)) {
-          offersByVenue.set(offer.venue_id, offer);
-        }
-      });
-
-      const reviewsByVenue = new Map();
-      (reviewsResult.data || []).forEach(review => {
-        if (!reviewsByVenue.has(review.venue_id)) {
-          reviewsByVenue.set(review.venue_id, []);
-        }
-        reviewsByVenue.get(review.venue_id).push(review);
-      });
-
-      const venuesWithData = (data || []).map((venue: any) => {
-        const venueReviews = reviewsByVenue.get(venue.id) || [];
-        const calculatedRating = venueReviews.length > 0
-          ? venueReviews.reduce((acc: number, r: any) => acc + r.rating, 0) / venueReviews.length
-          : 0;
-
-        const venuePhotos = photosByVenue.get(venue.id) || [];
-
-        return {
-          ...venue,
-          venue_photos: venuePhotos,
-          active_offer: offersByVenue.get(venue.id) || null,
-          calculated_rating: calculatedRating,
-          review_count: venueReviews.length
-        };
-      });
 
       if (fetchOffset === 0) {
         setVenues(venuesWithData);

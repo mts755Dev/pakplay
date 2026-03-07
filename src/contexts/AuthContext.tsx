@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, useRef, ReactNode, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 interface AuthContextType {
@@ -28,31 +28,37 @@ const AuthContext = createContext<AuthContextType>({
 export const useAuth = () => useContext(AuthContext);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // ───── Hydration-safe state: always null/false on first render (server & client match) ─────
-  const [user, setUser] = useState<any>(null);
-  const [userRole, setUserRole] = useState<string | null>(null);
-  const [authReady, setAuthReady] = useState(false);
-  const didInit = useRef(false);
+  const [user, setUser] = useState<any>(() => {
+    // Initialize from cache synchronously to prevent flash
+    if (typeof window !== 'undefined') {
+      const cachedLoggedIn = localStorage.getItem('user_logged_in');
+      const cachedRole = localStorage.getItem('user_role');
+      const cachedId = localStorage.getItem('user_id');
+      const cachedEmail = localStorage.getItem('user_email');
+      if (cachedLoggedIn && cachedRole) {
+        return { id: cachedId, email: cachedEmail, _cached: true };
+      }
+    }
+    return null;
+  });
+
+  const [userRole, setUserRole] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('user_role');
+    }
+    return null;
+  });
+
+  // Auth is always "ready" on the client — either we have cached data (logged in)
+  // or we don't (not logged in). Either way, show buttons immediately.
+  const [authReady, setAuthReady] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return true; // Always ready on client — show Sign In if no cache, Sign Out if cache exists
+    }
+    return false; // SSR: not ready
+  });
 
   useEffect(() => {
-    // Runs once on client mount — read cached auth from localStorage SYNCHRONOUSLY
-    // so all three state updates batch into the same React commit (no flash).
-    if (didInit.current) return;
-    didInit.current = true;
-
-    const cachedLoggedIn = localStorage.getItem('user_logged_in');
-    const cachedRole = localStorage.getItem('user_role');
-    const cachedId = localStorage.getItem('user_id');
-    const cachedEmail = localStorage.getItem('user_email');
-
-    if (cachedLoggedIn && cachedRole) {
-      setUser({ id: cachedId, email: cachedEmail, _cached: true });
-      setUserRole(cachedRole);
-    }
-    // Whether cached or not, auth is ready now — show the correct buttons immediately
-    setAuthReady(true);
-
-    // Then verify with Supabase in the background (corrects stale cache)
     let isMounted = true;
 
     const checkUser = async () => {
@@ -62,44 +68,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (session?.user) {
           setUser(session.user);
-
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', session.user.id)
-            .single();
-
-          if (!isMounted) return;
-
-          if (profile?.role) {
-            setUserRole(profile.role);
-            localStorage.setItem('user_role', profile.role);
-            localStorage.setItem('user_logged_in', 'true');
-            localStorage.setItem('user_id', session.user.id);
-            localStorage.setItem('user_email', session.user.email || '');
-          }
-        } else {
-          setUser(null);
-          setUserRole(null);
-          localStorage.removeItem('user_role');
-          localStorage.removeItem('user_logged_in');
-          localStorage.removeItem('user_id');
-          localStorage.removeItem('user_email');
-        }
-      } catch {
-        // Silent fail — cached state is good enough
-      }
-    };
-
-    checkUser();
-
-    // Listen to auth changes for real-time updates
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!isMounted) return;
-      try {
-        if (session?.user) {
-          setUser(session.user);
-
           const { data: profile } = await supabase
             .from('profiles')
             .select('role')
@@ -124,7 +92,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           localStorage.removeItem('user_email');
         }
       } catch (error) {
+        // Silent fail
+      } finally {
+        if (isMounted) setAuthReady(true);
+      }
+    };
+
+    checkUser();
+
+    // Listen to auth changes for real-time updates
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
+      try {
+        if (session?.user) {
+          setUser(session.user);
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', session.user.id)
+            .single();
+
+          if (!isMounted) return;
+
+          if (profile?.role) {
+            setUserRole(profile.role);
+            localStorage.setItem('user_role', profile.role);
+            localStorage.setItem('user_logged_in', 'true');
+            localStorage.setItem('user_id', session.user.id);
+            localStorage.setItem('user_email', session.user.email || '');
+          }
+        } else {
+          setUser(null);
+          setUserRole(null);
+          localStorage.removeItem('user_role');
+          localStorage.removeItem('user_logged_in');
+          localStorage.removeItem('user_id');
+          localStorage.removeItem('user_email');
+        }
+        setAuthReady(true);
+      } catch (error) {
         console.error('Auth state change error:', error);
+        if (isMounted) setAuthReady(true);
       }
     });
 
@@ -135,7 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const handleSignOut = useCallback(async () => {
-    // 1. Clear localStorage immediately
+    // 1. Clear localStorage
     localStorage.removeItem('user_role');
     localStorage.removeItem('user_logged_in');
     localStorage.removeItem('user_id');
@@ -145,28 +153,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setUserRole(null);
 
-    // 3. Call Supabase signOut (with timeout safety)
-    try {
-      await Promise.race([
-        supabase.auth.signOut(),
-        new Promise(resolve => setTimeout(resolve, 3000)),
-      ]);
-    } catch {
-      // Ignore errors
-    }
-
-    // 4. Force-clear ALL Supabase auth cookies (bulletproof cleanup)
-    //    @supabase/ssr stores tokens in cookies like: sb-<ref>-auth-token, sb-<ref>-auth-token.0, .1, etc.
+    // 3. Force-clear ALL Supabase auth cookies (synchronous — instant)
     document.cookie.split(';').forEach(cookie => {
       const name = cookie.split('=')[0].trim();
       if (name.startsWith('sb-') || name.includes('supabase')) {
-        // Delete the cookie for all possible paths
         document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
         document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=${window.location.hostname}`;
       }
     });
 
-    // 5. Also clear sessionStorage in case anything is cached there
+    // 4. Clear sessionStorage
     try {
       Object.keys(sessionStorage).forEach(key => {
         if (key.startsWith('sb-') || key.includes('supabase')) {
@@ -182,7 +178,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Ignore storage errors
     }
 
-    // 6. Redirect — session is fully destroyed now
+    // 5. Fire Supabase signOut in background (don't await — cookies already cleared)
+    supabase.auth.signOut().catch(() => {});
+
+    // 6. Redirect immediately — no waiting
     window.location.href = '/';
   }, []);
 

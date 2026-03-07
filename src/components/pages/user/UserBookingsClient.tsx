@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,8 @@ import { toast } from "sonner";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
+import { fetchUserBookings } from "@/lib/server-actions";
 
 interface Booking {
   id: string;
@@ -60,11 +62,13 @@ const formatTime = (time: string) => {
 
 export function UserBookingsClient() {
   const router = useRouter();
+  const { user, isLoggedIn } = useAuth();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'upcoming' | 'past'>('all');
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const fetchedEmailRef = useRef<string | null>(null);
 
   // Helper function to check if booking start time has passed
   const isBookingStartTimePassed = (bookingDate: string, startTime: string): boolean => {
@@ -140,44 +144,12 @@ export function UserBookingsClient() {
     }
   };
 
-  const fetchBookings = useCallback(async () => {
+  const fetchBookings = useCallback(async (email: string) => {
     try {
       setLoading(true);
-      
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user?.email) {
-        router.push('/signin');
-        return;
-      }
+      setUserEmail(email);
 
-      setUserEmail(user.email);
-
-      const { data, error } = await supabase
-        .from('bookings')
-        .select(`
-          id,
-          booking_date,
-          start_time,
-          end_time,
-          status,
-          total_price,
-          total_hours,
-          player_name,
-          player_email,
-          player_phone,
-          created_at,
-          venues (
-            name,
-            slug,
-            venue_photos (
-              photo_url,
-              display_order
-            )
-          )
-        `)
-        .eq('player_email', user.email)
-        .order('booking_date', { ascending: false })
-        .order('start_time', { ascending: false });
+      const { data, error } = await fetchUserBookings(email);
 
       if (error) throw error;
 
@@ -204,27 +176,26 @@ export function UserBookingsClient() {
         };
       });
 
-      // Auto-complete confirmed bookings and delete expired pending bookings
+      // Update local state immediately — don't wait for background DB cleanup
+      // Update the status in the local state for bookings that were auto-completed
+      const updatedBookings = formattedBookings.map(booking => {
+        if (booking.status === 'confirmed' && isBookingEndTimePassed(booking.booking_date, booking.end_time)) {
+          return { ...booking, status: 'completed' as const };
+        }
+        return booking;
+      });
+      
+      // Filter out the expired pending bookings from the state
+      const nonExpiredBookings = updatedBookings.filter(booking => {
+        return !(booking.status === 'pending' && isBookingStartTimePassed(booking.booking_date, booking.start_time));
+      });
+      
+      setBookings(nonExpiredBookings);
+
+      // Run DB cleanup in background — don't block the UI
       if (formattedBookings.length > 0) {
-        await autoCompleteBookings(formattedBookings);
-        await deleteExpiredPendingBookings(formattedBookings);
-        
-        // Update the status in the local state for bookings that were auto-completed
-        const updatedBookings = formattedBookings.map(booking => {
-          if (booking.status === 'confirmed' && isBookingEndTimePassed(booking.booking_date, booking.end_time)) {
-            return { ...booking, status: 'completed' as const };
-          }
-          return booking;
-        });
-        
-        // Filter out the expired bookings from the state
-        const nonExpiredBookings = updatedBookings.filter(booking => {
-          return !(booking.status === 'pending' && isBookingStartTimePassed(booking.booking_date, booking.start_time));
-        });
-        
-        setBookings(nonExpiredBookings);
-      } else {
-        setBookings(formattedBookings);
+        autoCompleteBookings(formattedBookings).catch(() => {});
+        deleteExpiredPendingBookings(formattedBookings).catch(() => {});
       }
     } catch (error: any) {
       console.error('Error fetching bookings:', error);
@@ -232,11 +203,21 @@ export function UserBookingsClient() {
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  }, []);
 
   useEffect(() => {
-    fetchBookings();
-  }, [fetchBookings]);
+    // Use cached email from AuthContext — no extra network call needed
+    const email = user?.email;
+    
+    // Only fetch if email changed or hasn't been fetched
+    if (email && email !== fetchedEmailRef.current) {
+      fetchedEmailRef.current = email;
+      fetchBookings(email);
+    } else if (!isLoggedIn && !user) {
+      // Not logged in at all — stop loading
+      setLoading(false);
+    }
+  }, [user, isLoggedIn]);
 
   const handleCancelBooking = async () => {
     if (!cancellingId) return;

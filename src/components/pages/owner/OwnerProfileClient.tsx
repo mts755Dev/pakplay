@@ -9,8 +9,10 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { User, Loader2, Save, Building2, Calendar } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
 export function OwnerProfileClient() {
+  const { user: authUser, userRole, isLoggedIn, authReady } = useAuth();
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [venueStats, setVenueStats] = useState({ total: 0, approved: 0 });
@@ -25,55 +27,58 @@ export function OwnerProfileClient() {
   });
 
   useEffect(() => {
-    checkUser();
-  }, []);
+    if (!authReady) return;
 
-  const checkUser = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single();
-
-        if (profile?.role === 'admin') {
-          toast.error("Access denied. Please use admin dashboard.");
-          window.location.href = '/admin/dashboard';
-          return;
-        }
-
-        if (profile?.role !== 'venue_owner') {
-          toast.error("Access denied. Venue owners only.");
-          window.location.href = '/';
-          return;
-        }
-
-        setUser(user);
-        setProfile(profile);
-        setFormData({
-          full_name: profile?.full_name || '',
-          phone: profile?.phone || '',
-          whatsapp_number: profile?.whatsapp_number || '',
-          email: user.email || '',
-        });
-
-        // Fetch venue stats
-        const { data: venues } = await supabase
-          .from('venues')
-          .select('id, status')
-          .eq('owner_id', user.id);
-
-        setVenueStats({
-          total: venues?.length || 0,
-          approved: venues?.filter(v => v.status === 'approved').length || 0,
-        });
-      } else {
-        window.location.href = '/signin';
-      }
-    } finally {
+    if (!isLoggedIn || !authUser) {
+      window.location.href = '/signin';
       setAuthChecking(false);
+      setLoading(false);
+      return;
+    }
+
+    if (userRole === 'admin') {
+      toast.error("Access denied. Please use admin dashboard.");
+      window.location.href = '/admin/dashboard';
+      return;
+    }
+
+    if (userRole !== 'venue_owner') {
+      toast.error("Access denied. Venue owners only.");
+      window.location.href = '/';
+      return;
+    }
+
+    setUser(authUser);
+    setAuthChecking(false);
+    loadProfileData(authUser.id, authUser.email);
+  }, [authReady, isLoggedIn, authUser, userRole]);
+
+  const loadProfileData = async (userId: string, email: string) => {
+    try {
+      // Use supabase client directly - data queries read session from cookies
+      // (unlike .auth.getUser()/.auth.getSession() which can hang)
+      const [profileResult, venuesResult] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', userId).single(),
+        supabase.from('venues').select('id, status').eq('owner_id', userId),
+      ]);
+
+      if (profileResult.error) throw profileResult.error;
+
+      setProfile(profileResult.data);
+      setFormData({
+        full_name: profileResult.data?.full_name || '',
+        phone: profileResult.data?.phone || '',
+        whatsapp_number: profileResult.data?.whatsapp_number || '',
+        email: email || '',
+      });
+      setVenueStats({
+        total: venuesResult.data?.length || 0,
+        approved: venuesResult.data?.filter((v: any) => v.status === 'approved').length || 0,
+      });
+    } catch (error: any) {
+      console.error('Error loading profile:', error);
+      toast.error('Failed to load profile');
+    } finally {
       setLoading(false);
     }
   };
@@ -131,7 +136,7 @@ export function OwnerProfileClient() {
       }
 
       toast.success("Profile updated successfully!");
-      checkUser();
+      if (authUser) loadProfileData(authUser.id, authUser.email || '');
     } catch (error: any) {
       toast.error(error.message || "Failed to update profile");
     } finally {

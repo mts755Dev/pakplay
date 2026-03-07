@@ -13,6 +13,7 @@ import { Calendar, Tag, Percent, Edit, Trash2, Plus, ArrowLeft, Loader2 } from '
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { DashboardSidebar } from '@/components/DashboardSidebar';
+import { useAuth } from '@/contexts/AuthContext';
 import { Tables } from '@/integrations/supabase/types';
 import {
   Dialog,
@@ -36,6 +37,7 @@ type SpecialOffer = Tables<'special_offers'>;
 
 export function OwnerSpecialOffersClient() {
   const router = useRouter();
+  const { user: authUser, userRole, isLoggedIn, authReady } = useAuth();
   const [user, setUser] = useState<any>(null);
   const [authChecking, setAuthChecking] = useState(true);
   const [venues, setVenues] = useState<Venue[]>([]);
@@ -58,8 +60,31 @@ export function OwnerSpecialOffersClient() {
   const [offerToDelete, setOfferToDelete] = useState<string | null>(null);
 
   useEffect(() => {
-    checkUser();
-  }, []);
+    if (!authReady) return;
+
+    if (!isLoggedIn || !authUser) {
+      window.location.href = "/signin";
+      setAuthChecking(false);
+      return;
+    }
+
+    if (userRole === 'admin') {
+      toast.error("Access denied. Please use admin dashboard.");
+      window.location.href = "/admin/dashboard";
+      return;
+    }
+
+    if (userRole !== 'venue_owner') {
+      toast.error("Access denied. Venue owners only.");
+      window.location.href = "/";
+      return;
+    }
+
+    setUser(authUser);
+    setAuthChecking(false);
+    fetchVenues(authUser.id);
+    fetchOffers(authUser.id);
+  }, [authReady, isLoggedIn, authUser, userRole]);
 
   // Auto-fill original price when venue is selected
   useEffect(() => {
@@ -71,38 +96,6 @@ export function OwnerSpecialOffersClient() {
     }
   }, [selectedVenueId, venues, editingOffer]);
 
-  const checkUser = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single();
-
-        if (profile?.role === 'admin') {
-          toast.error("Access denied. Please use admin dashboard.");
-          window.location.href = "/admin/dashboard";
-          return;
-        }
-
-        if (profile?.role !== 'venue_owner') {
-          toast.error("Access denied. Venue owners only.");
-          window.location.href = "/";
-          return;
-        }
-        setUser(user);
-        fetchVenues(user.id);
-        fetchOffers(user.id);
-      } else {
-        window.location.href = "/signin";
-      }
-    } finally {
-      setAuthChecking(false);
-    }
-  };
-
   const fetchVenues = async (userId: string) => {
     try {
       const { data, error } = await supabase
@@ -111,28 +104,28 @@ export function OwnerSpecialOffersClient() {
         .eq('owner_id', userId)
         .eq('status', 'approved')
         .order('name');
-
       if (error) throw error;
       setVenues(data || []);
     } catch (error: any) {
+      console.error('Failed to load venues:', error);
       toast.error('Failed to load venues');
     }
   };
 
   const fetchOffers = async (userId: string) => {
     try {
+      // First get venue IDs
       const { data: venuesData } = await supabase
         .from('venues')
         .select('id')
         .eq('owner_id', userId);
 
       if (!venuesData || venuesData.length === 0) {
-        setLoading(false);
+        setOffers([]);
         return;
       }
 
       const venueIds = venuesData.map(v => v.id);
-
       const { data, error } = await supabase
         .from('special_offers')
         .select('*')
@@ -142,6 +135,7 @@ export function OwnerSpecialOffersClient() {
       if (error) throw error;
       setOffers(data || []);
     } catch (error: any) {
+      console.error('Failed to load offers:', error);
       toast.error('Failed to load offers');
     } finally {
       setLoading(false);

@@ -13,11 +13,8 @@ export const dynamic = 'force-dynamic';
 
 // Server Component with SSR
 export default async function UserBookingsPage() {
-  const userWithRole = await getServerUserWithRole();
-  
-  if (!userWithRole || !userWithRole.user) {
-    redirect('/signin');
-  }
+  // We remove the server-side auth check to allow immediate rendering of the client component
+  // The client component handles authentication state and data fetching securely
   
   return (
     <Suspense fallback={<div>Loading...</div>}>

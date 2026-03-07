@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { LocationSelector } from "@/components/LocationSelector";
 import { fetchVenueLoyaltyTiers, saveVenueLoyaltyTiers, LoyaltyTier } from "@/lib/server-actions";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface OwnerVenueEditClientProps {
   venueId: string;
@@ -24,6 +25,7 @@ interface OwnerVenueEditClientProps {
 export function OwnerVenueEditClient({ venueId, initialVenue }: OwnerVenueEditClientProps) {
   console.log("Rendering OwnerVenueEditClient - Loyalty Tiers:", initialVenue?.venue_loyalty_tiers);
   const router = useRouter();
+  const { user: authUser } = useAuth();
   const id = venueId;
   // Use initial venue data from server - no loading needed!
   const [venue] = useState<any>(initialVenue);
@@ -331,14 +333,13 @@ export function OwnerVenueEditClient({ venueId, initialVenue }: OwnerVenueEditCl
     setUploading(newPhotos.length > 0 || newPhotoUrls.length > 0);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      if (!authUser) {
         toast.error("Please sign in first");
         return;
       }
 
       // Upload logo if changed
-      const logoUrl = await uploadLogo(user.id);
+      const logoUrl = await uploadLogo(authUser.id);
 
       // Update venue
       const { error: venueError } = await supabase
@@ -376,7 +377,7 @@ export function OwnerVenueEditClient({ venueId, initialVenue }: OwnerVenueEditCl
 
       // Upload new photos
       if (newPhotos.length > 0 || newPhotoUrls.length > 0) {
-        const photoUrls = await uploadNewPhotos(id, user.id);
+        const photoUrls = await uploadNewPhotos(id, authUser.id);
         if (photoUrls.length > 0) {
           const photoInserts = photoUrls.map((url, index) => ({
             venue_id: id,

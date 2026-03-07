@@ -74,9 +74,12 @@ export function SignInPageClient() {
           return;
         }
 
-        // Cache role in localStorage
+        // Cache auth data in localStorage so AuthContext picks it up instantly on redirect
         if (profile?.role) {
           localStorage.setItem('user_role', profile.role);
+          localStorage.setItem('user_logged_in', 'true');
+          localStorage.setItem('user_id', data.user.id);
+          localStorage.setItem('user_email', data.user.email || '');
         }
 
         toast.success("Welcome back!");

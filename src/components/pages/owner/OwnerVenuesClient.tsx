@@ -19,6 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { LocationSelector } from "@/components/LocationSelector";
 import { fetchVenueLoyaltyTiers, saveVenueLoyaltyTiers } from "@/lib/server-actions";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface OwnerVenuesClientProps {
   initialVenues: any[];
@@ -115,16 +116,14 @@ export function OwnerVenuesClient({ initialVenues }: OwnerVenuesClientProps) {
     { value: '0', label: 'Sun' },
   ];
 
-  // Get user for update/delete operations (auth already checked on server)
+  const { user: authUser, authReady } = useAuth();
+  
+  // Get user for update/delete operations from AuthContext (no network call)
   useEffect(() => {
-    const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setUser(user);
-      }
-    };
-    getUser();
-  }, []);
+    if (authReady && authUser) {
+      setUser(authUser);
+    }
+  }, [authReady, authUser]);
 
   const fetchVenues = async (userId: string) => {
     // Refetch venues after update/delete

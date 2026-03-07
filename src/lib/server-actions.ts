@@ -831,3 +831,193 @@ export async function saveVenueLoyaltyTiers(
     return { error: error.message || 'Failed to save loyalty tiers' };
   }
 }
+
+/**
+ * Fetch user bookings - uses supabaseServer (service role) to avoid auth hangs
+ */
+export async function fetchUserBookings(email: string) {
+  try {
+    if (!email) {
+      return { data: [], error: 'No email provided' };
+    }
+
+    const { data, error } = await supabaseServer
+      .from('bookings')
+      .select(`
+        *,
+        venues (
+          name,
+          slug,
+          venue_photos (
+            photo_url,
+            display_order
+          )
+        )
+      `)
+      .eq('player_email', email)
+      .order('booking_date', { ascending: false })
+      .order('start_time', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching user bookings:', error);
+      return { data: [], error: error.message };
+    }
+
+    return { data: data || [], error: null };
+  } catch (error: any) {
+    console.error('Error fetching user bookings:', error);
+    return { data: [], error: error.message };
+  }
+}
+
+/**
+ * Fetch owner's venues - uses supabaseServer to avoid client-side auth hangs
+ */
+export async function fetchOwnerVenuesServer(userId: string) {
+  try {
+    const { data, error } = await supabaseServer
+      .from('venues')
+      .select('*')
+      .eq('owner_id', userId)
+      .eq('status', 'approved')
+      .order('name');
+
+    if (error) {
+      console.error('Error fetching owner venues:', error);
+      return { data: [], error: error.message };
+    }
+    return { data: data || [], error: null };
+  } catch (error: any) {
+    console.error('Error fetching owner venues:', error);
+    return { data: [], error: error.message };
+  }
+}
+
+/**
+ * Fetch special offers for owner's venues - uses supabaseServer to avoid client-side auth hangs
+ */
+export async function fetchOwnerOffersServer(userId: string) {
+  try {
+    // First get venue IDs
+    const { data: venuesData, error: venuesError } = await supabaseServer
+      .from('venues')
+      .select('id')
+      .eq('owner_id', userId);
+
+    if (venuesError) {
+      console.error('Error fetching owner venue ids:', venuesError);
+      return { data: [], error: venuesError.message };
+    }
+
+    if (!venuesData || venuesData.length === 0) {
+      return { data: [], error: null };
+    }
+
+    const venueIds = venuesData.map(v => v.id);
+
+    const { data, error } = await supabaseServer
+      .from('special_offers')
+      .select('*')
+      .in('venue_id', venueIds)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching owner offers:', error);
+      return { data: [], error: error.message };
+    }
+    return { data: data || [], error: null };
+  } catch (error: any) {
+    console.error('Error fetching owner offers:', error);
+    return { data: [], error: error.message };
+  }
+}
+
+/**
+ * Fetch owner profile + venue stats
+ */
+export async function fetchOwnerProfileServer(userId: string) {
+  try {
+    const [profileResult, venuesResult] = await Promise.all([
+      supabaseServer.from('profiles').select('*').eq('id', userId).single(),
+      supabaseServer.from('venues').select('id, status').eq('owner_id', userId),
+    ]);
+
+    return {
+      profile: profileResult.data,
+      venues: venuesResult.data || [],
+      error: profileResult.error?.message || venuesResult.error?.message || null,
+    };
+  } catch (error: any) {
+    console.error('Error fetching owner profile:', error);
+    return { profile: null, venues: [], error: error.message };
+  }
+}
+
+/**
+ * Fetch owner's venues with subdomain info (for settings page)
+ */
+export async function fetchOwnerVenuesForSettings(userId: string) {
+  try {
+    const { data, error } = await supabaseServer
+      .from('venues')
+      .select('id, name, slug, subdomain')
+      .eq('owner_id', userId)
+      .eq('status', 'approved')
+      .order('created_at', { ascending: false });
+
+    if (error) return { data: [], error: error.message };
+    return { data: data || [], error: null };
+  } catch (error: any) {
+    console.error('Error fetching owner venues for settings:', error);
+    return { data: [], error: error.message };
+  }
+}
+
+/**
+ * Fetch owner bookings via server
+ */
+export async function fetchOwnerBookingsServer(userId: string) {
+  try {
+    const { data: venues } = await supabaseServer
+      .from('venues')
+      .select('id')
+      .eq('owner_id', userId);
+
+    if (!venues || venues.length === 0) {
+      return { data: [], error: null };
+    }
+
+    const venueIds = venues.map(v => v.id);
+
+    const { data, error } = await supabaseServer
+      .from('bookings')
+      .select('*, venues(name, city, sport_type)')
+      .in('venue_id', venueIds)
+      .order('booking_date', { ascending: false });
+
+    if (error) return { data: [], error: error.message };
+    return { data: data || [], error: null };
+  } catch (error: any) {
+    console.error('Error fetching owner bookings:', error);
+    return { data: [], error: error.message };
+  }
+}
+
+/**
+ * Fetch owner venues with photos (for venues management page refresh)
+ */
+export async function fetchOwnerVenuesWithPhotos(userId: string) {
+  try {
+    const { data, error } = await supabaseServer
+      .from('venues')
+      .select('*, venue_photos(*)')
+      .eq('owner_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) return { data: [], error: error.message };
+    return { data: data || [], error: null };
+  } catch (error: any) {
+    console.error('Error fetching owner venues with photos:', error);
+    return { data: [], error: error.message };
+  }
+}

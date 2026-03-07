@@ -9,12 +9,14 @@ import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Calendar, Building2, User, Clock, DollarSign, MapPin, CheckCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface OwnerBookingsClientProps {
   initialBookings?: any[] | null;
 }
 
 export function OwnerBookingsClient({ initialBookings }: OwnerBookingsClientProps) {
+  const { user: authUser } = useAuth();
   const [bookings, setBookings] = useState<any[]>(() => {
     // Ensure we always have an array
     if (!initialBookings) return [];
@@ -127,8 +129,7 @@ export function OwnerBookingsClient({ initialBookings }: OwnerBookingsClientProp
   const fetchBookings = async () => {
     try {
       setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      if (!authUser?.id) {
         setLoading(false);
         return;
       }
@@ -136,7 +137,7 @@ export function OwnerBookingsClient({ initialBookings }: OwnerBookingsClientProp
       const { data: venues } = await supabase
         .from('venues')
         .select('id')
-        .eq('owner_id', user.id);
+        .eq('owner_id', authUser.id);
 
       if (!venues || venues.length === 0) {
         setBookings([]);
@@ -148,26 +149,19 @@ export function OwnerBookingsClient({ initialBookings }: OwnerBookingsClientProp
 
       const { data: bookingsData, error } = await supabase
         .from('bookings')
-        .select(`
-          *,
-          venues(name, city, sport_type)
-        `)
+        .select('*, venues(name, city, sport_type)')
         .in('venue_id', venueIds)
         .order('booking_date', { ascending: false });
 
-      if (error) {
-        console.error('Error fetching bookings:', error);
-        throw error;
-      }
-
-      // Auto-complete confirmed bookings with passed end time
-      if (bookingsData && bookingsData.length > 0) {
-        await autoCompleteBookings(bookingsData);
-        // Delete expired pending bookings from database
-        await deleteExpiredPendingBookings(bookingsData);
-      }
+      if (error) throw error;
 
       setBookings(bookingsData || []);
+
+      // Run DB cleanup in background — don't block the UI
+      if (bookingsData && bookingsData.length > 0) {
+        autoCompleteBookings(bookingsData).catch(() => {});
+        deleteExpiredPendingBookings(bookingsData).catch(() => {});
+      }
     } catch (error: any) {
       console.error('Error fetching bookings:', error);
       toast.error(error.message || "Failed to load bookings");
@@ -216,10 +210,7 @@ export function OwnerBookingsClient({ initialBookings }: OwnerBookingsClientProp
     if (!deletingBookingId) return;
 
     try {
-      // Check authentication
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
+      if (!authUser) {
         toast.error("You must be logged in to delete bookings");
         setDeletingBookingId(null);
         return;

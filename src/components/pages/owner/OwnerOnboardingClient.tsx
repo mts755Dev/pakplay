@@ -16,9 +16,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { LocationSelector } from "@/components/LocationSelector";
 import { formatFullLocation } from "@/lib/locationHelpers";
 import ppLogo from "@/assets/pp logo.png";
+import { useAuth } from "@/contexts/AuthContext";
 
 export function OwnerOnboardingClient() {
   const router = useRouter();
+  const { user: authUser, isLoggedIn, authReady } = useAuth();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -85,18 +87,14 @@ export function OwnerOnboardingClient() {
   ];
 
   useEffect(() => {
-    checkUser();
-  }, []);
-
-  const checkUser = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
+    if (!authReady) return;
+    if (!isLoggedIn || !authUser) {
       toast.error("Please sign in to list a venue");
       router.push('/signin');
       return;
     }
-    setUser(user);
-  };
+    setUser(authUser);
+  }, [authReady, isLoggedIn, authUser]);
 
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {

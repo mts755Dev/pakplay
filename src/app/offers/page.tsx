@@ -1,10 +1,7 @@
 import { Metadata } from "next";
-import { Suspense } from "react";
 import OffersPageClient from "@/components/pages/OffersPageClient";
 import { fetchInitialOffers } from "@/lib/server-actions";
 
-// Revalidate every 60 seconds (ISR) — page is cached and served instantly,
-// then refreshed in the background.
 export const revalidate = 60;
 
 export const metadata: Metadata = {
@@ -16,11 +13,9 @@ export default async function OffersPage() {
   const { offers, totalCount } = await fetchInitialOffers();
 
   return (
-    <Suspense>
-      <OffersPageClient 
-        initialOffers={offers}
-        initialTotalCount={totalCount}
-      />
-    </Suspense>
+    <OffersPageClient 
+      initialOffers={offers}
+      initialTotalCount={totalCount}
+    />
   );
 }
