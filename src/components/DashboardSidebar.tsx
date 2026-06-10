@@ -20,8 +20,7 @@ import {
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "./ui/sheet";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
+import { signOutClient } from "@/lib/sign-out";
 import ppLogo from "@/assets/pp logo.png";
 import { useState } from "react";
 
@@ -56,14 +55,8 @@ export const DashboardSidebar = ({ userRole = 'owner' }: DashboardSidebarProps) 
 
   const links = userRole === 'admin' ? adminLinks : ownerLinks;
 
-  const handleSignOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      toast.error("Error signing out");
-    } else {
-      toast.success("Signed out successfully");
-      window.location.href = "/";
-    }
+  const handleSignOut = () => {
+    signOutClient('/');
   };
 
   const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => (

@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { signOutClient } from '@/lib/sign-out';
 
 interface AuthContextType {
   user: any;
@@ -143,46 +144,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const handleSignOut = useCallback(async () => {
-    // 1. Clear localStorage
-    localStorage.removeItem('user_role');
-    localStorage.removeItem('user_logged_in');
-    localStorage.removeItem('user_id');
-    localStorage.removeItem('user_email');
-
-    // 2. Clear React state
     setUser(null);
     setUserRole(null);
-
-    // 3. Force-clear ALL Supabase auth cookies (synchronous — instant)
-    document.cookie.split(';').forEach(cookie => {
-      const name = cookie.split('=')[0].trim();
-      if (name.startsWith('sb-') || name.includes('supabase')) {
-        document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
-        document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=${window.location.hostname}`;
-      }
-    });
-
-    // 4. Clear sessionStorage
-    try {
-      Object.keys(sessionStorage).forEach(key => {
-        if (key.startsWith('sb-') || key.includes('supabase')) {
-          sessionStorage.removeItem(key);
-        }
-      });
-      Object.keys(localStorage).forEach(key => {
-        if (key.startsWith('sb-') || key.includes('supabase')) {
-          localStorage.removeItem(key);
-        }
-      });
-    } catch {
-      // Ignore storage errors
-    }
-
-    // 5. Fire Supabase signOut in background (don't await — cookies already cleared)
-    supabase.auth.signOut().catch(() => {});
-
-    // 6. Redirect immediately — no waiting
-    window.location.href = '/';
+    signOutClient('/');
   }, []);
 
   const isLoggedIn = !!user;

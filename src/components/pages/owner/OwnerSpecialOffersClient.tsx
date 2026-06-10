@@ -1,8 +1,6 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -13,7 +11,6 @@ import { Calendar, Tag, Percent, Edit, Trash2, Plus, ArrowLeft, Loader2 } from '
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { DashboardSidebar } from '@/components/DashboardSidebar';
-import { useAuth } from '@/contexts/AuthContext';
 import { Tables } from '@/integrations/supabase/types';
 import {
   Dialog,
@@ -35,14 +32,19 @@ import {
 type Venue = Tables<'venues'>;
 type SpecialOffer = Tables<'special_offers'>;
 
-export function OwnerSpecialOffersClient() {
-  const router = useRouter();
-  const { user: authUser, userRole, isLoggedIn, authReady } = useAuth();
-  const [user, setUser] = useState<any>(null);
-  const [authChecking, setAuthChecking] = useState(true);
-  const [venues, setVenues] = useState<Venue[]>([]);
-  const [offers, setOffers] = useState<SpecialOffer[]>([]);
-  const [loading, setLoading] = useState(true);
+interface OwnerSpecialOffersClientProps {
+  initialVenues: Venue[];
+  initialOffers: SpecialOffer[];
+  userId: string;
+}
+
+export function OwnerSpecialOffersClient({
+  initialVenues,
+  initialOffers,
+  userId,
+}: OwnerSpecialOffersClientProps) {
+  const [venues] = useState<Venue[]>(initialVenues);
+  const [offers, setOffers] = useState<SpecialOffer[]>(initialOffers);
   const [submitting, setSubmitting] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingOffer, setEditingOffer] = useState<SpecialOffer | null>(null);
@@ -59,33 +61,6 @@ export function OwnerSpecialOffersClient() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [offerToDelete, setOfferToDelete] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!authReady) return;
-
-    if (!isLoggedIn || !authUser) {
-      window.location.href = "/signin";
-      setAuthChecking(false);
-      return;
-    }
-
-    if (userRole === 'admin') {
-      toast.error("Access denied. Please use admin dashboard.");
-      window.location.href = "/admin/dashboard";
-      return;
-    }
-
-    if (userRole !== 'venue_owner') {
-      toast.error("Access denied. Venue owners only.");
-      window.location.href = "/";
-      return;
-    }
-
-    setUser(authUser);
-    setAuthChecking(false);
-    fetchVenues(authUser.id);
-    fetchOffers(authUser.id);
-  }, [authReady, isLoggedIn, authUser, userRole]);
-
   // Auto-fill original price when venue is selected
   useEffect(() => {
     if (selectedVenueId && !editingOffer) {
@@ -95,52 +70,6 @@ export function OwnerSpecialOffersClient() {
       }
     }
   }, [selectedVenueId, venues, editingOffer]);
-
-  const fetchVenues = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('venues')
-        .select('*')
-        .eq('owner_id', userId)
-        .eq('status', 'approved')
-        .order('name');
-      if (error) throw error;
-      setVenues(data || []);
-    } catch (error: any) {
-      console.error('Failed to load venues:', error);
-      toast.error('Failed to load venues');
-    }
-  };
-
-  const fetchOffers = async (userId: string) => {
-    try {
-      // First get venue IDs
-      const { data: venuesData } = await supabase
-        .from('venues')
-        .select('id')
-        .eq('owner_id', userId);
-
-      if (!venuesData || venuesData.length === 0) {
-        setOffers([]);
-        return;
-      }
-
-      const venueIds = venuesData.map(v => v.id);
-      const { data, error } = await supabase
-        .from('special_offers')
-        .select('*')
-        .in('venue_id', venueIds)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setOffers(data || []);
-    } catch (error: any) {
-      console.error('Failed to load offers:', error);
-      toast.error('Failed to load offers');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const resetForm = () => {
     setSelectedVenueId('');
@@ -214,25 +143,30 @@ export function OwnerSpecialOffersClient() {
       };
 
       if (editingOffer) {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('special_offers')
           .update(offerData)
-          .eq('id', editingOffer.id);
+          .eq('id', editingOffer.id)
+          .select()
+          .single();
 
         if (error) throw error;
+        setOffers((prev) => prev.map((o) => (o.id === editingOffer.id ? data : o)));
         toast.success('Offer updated successfully!');
       } else {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('special_offers')
-          .insert([offerData]);
+          .insert([offerData])
+          .select()
+          .single();
 
         if (error) throw error;
+        setOffers((prev) => [data, ...prev]);
         toast.success('Offer created successfully!');
       }
 
       setDialogOpen(false);
       resetForm();
-      if (user) fetchOffers(user.id);
     } catch (error: any) {
       toast.error('Failed to save offer');
     } finally {
@@ -255,10 +189,10 @@ export function OwnerSpecialOffersClient() {
         .eq('id', offerToDelete);
 
       if (error) throw error;
+      setOffers((prev) => prev.filter((o) => o.id !== offerToDelete));
       toast.success('Offer deleted successfully!');
       setDeleteDialogOpen(false);
       setOfferToDelete(null);
-      if (user) fetchOffers(user.id);
     } catch (error: any) {
       toast.error('Failed to delete offer');
     }
@@ -266,14 +200,16 @@ export function OwnerSpecialOffersClient() {
 
   const toggleOfferStatus = async (offer: SpecialOffer) => {
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('special_offers')
         .update({ is_active: !offer.is_active })
-        .eq('id', offer.id);
+        .eq('id', offer.id)
+        .select()
+        .single();
 
       if (error) throw error;
+      setOffers((prev) => prev.map((o) => (o.id === offer.id ? data : o)));
       toast.success(`Offer ${!offer.is_active ? 'activated' : 'deactivated'} successfully!`);
-      if (user) fetchOffers(user.id);
     } catch (error: any) {
       toast.error('Failed to update offer status');
     }
@@ -300,14 +236,6 @@ export function OwnerSpecialOffersClient() {
       minute: '2-digit',
     });
   };
-
-  if (authChecking) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
 
   return (
     <div className="flex h-screen bg-background">
@@ -486,11 +414,7 @@ export function OwnerSpecialOffersClient() {
           </div>
 
           {/* Offers List */}
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            </div>
-          ) : offers.length === 0 ? (
+          {offers.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center">
                 <Tag className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />

@@ -5,82 +5,28 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Lock, AlertTriangle, Globe, Copy, Check, ExternalLink } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { useAuth } from "@/contexts/AuthContext";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-export function OwnerSettingsClient() {
-  const router = useRouter();
-  const { user: authUser, userRole, isLoggedIn, authReady } = useAuth();
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [authChecking, setAuthChecking] = useState(true);
+interface OwnerSettingsClientProps {
+  initialVenues: Array<{ id: string; name: string; slug: string; subdomain: string | null }>;
+  userId: string;
+}
+
+export function OwnerSettingsClient({ initialVenues, userId }: OwnerSettingsClientProps) {
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
     newPassword: '',
     confirmPassword: '',
   });
-  const [venues, setVenues] = useState<any[]>([]);
-  const [selectedVenue, setSelectedVenue] = useState<string>('');
-  const [customSubdomain, setCustomSubdomain] = useState('');
+  const [venues, setVenues] = useState(initialVenues);
+  const [selectedVenue, setSelectedVenue] = useState<string>(initialVenues[0]?.id || '');
+  const [customSubdomain, setCustomSubdomain] = useState(initialVenues[0]?.subdomain || '');
   const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    if (!authReady) return;
-
-    if (!isLoggedIn || !authUser) {
-      router.push('/signin');
-      setAuthChecking(false);
-      setLoading(false);
-      return;
-    }
-
-    if (userRole === 'admin') {
-      toast.error("Access denied. Please use admin dashboard.");
-      router.push('/admin/dashboard');
-      return;
-    }
-
-    if (userRole !== 'venue_owner') {
-      toast.error("Access denied. Venue owners only.");
-      router.push('/');
-      return;
-    }
-
-    setUser(authUser);
-    setAuthChecking(false);
-    loadVenues(authUser.id);
-  }, [authReady, isLoggedIn, authUser, userRole]);
-
-  const loadVenues = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('venues')
-        .select('id, name, slug, subdomain')
-        .eq('owner_id', userId)
-        .eq('status', 'approved')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      setVenues(data || []);
-      
-      // Auto-select first venue if available
-      if (data && data.length > 0) {
-        setSelectedVenue(data[0].id);
-        setCustomSubdomain(data[0].subdomain || '');
-      }
-    } catch (error: any) {
-      console.error('Error fetching venues:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;
@@ -138,11 +84,12 @@ export function OwnerSettingsClient() {
       if (error) throw error;
 
       toast.success("Custom subdomain updated successfully!");
-      
-      // Refresh venues list
-      if (user) {
-        await loadVenues(user.id);
-      }
+
+      setVenues((prev) =>
+        prev.map((v) =>
+          v.id === selectedVenue ? { ...v, subdomain: customSubdomain || null } : v
+        )
+      );
     } catch (error: any) {
       toast.error(error.message || "Failed to update subdomain");
     } finally {
@@ -192,19 +139,7 @@ export function OwnerSettingsClient() {
     }
   };
 
-  const handleSignOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      toast.error("Error signing out");
-    } else {
-      toast.success("Signed out successfully");
-      window.location.href = "/";
-    }
-  };
-
   const handleDeleteAccount = async () => {
-    if (!user) return;
-
     setSaving(true);
     try {
       // Call the database function to delete the user account
@@ -235,19 +170,6 @@ export function OwnerSettingsClient() {
     }
   };
 
-  if (authChecking) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-primary" />
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!user) return null;
-
   return (
     <div className="flex h-screen bg-background">
       <DashboardSidebar userRole="owner" />
@@ -259,13 +181,7 @@ export function OwnerSettingsClient() {
             <p className="text-muted-foreground mt-1">Manage your account settings and security</p>
           </div>
 
-          {loading ? (
-            <div className="text-center py-12">
-              <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-primary" />
-              <p className="text-muted-foreground">Loading settings...</p>
-            </div>
-          ) : (
-            <div className="max-w-3xl space-y-6">
+          <div className="max-w-3xl space-y-6">
               {/* Custom Subdomain */}
               {venues.length > 0 && (
                 <Card className="p-6">
@@ -470,7 +386,6 @@ export function OwnerSettingsClient() {
                 </AlertDialog>
               </Card>
             </div>
-          )}
         </div>
       </div>
     </div>

@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { clearAuthSession } from "@/lib/sign-out";
 import { Loader2, ArrowLeft } from "lucide-react";
 import ppLogo from "@/assets/pp logo.png";
 
@@ -68,7 +69,7 @@ export function SignInPageClient() {
 
         // Block admins from signing in here
         if (profile?.role === 'admin') {
-          await supabase.auth.signOut();
+          clearAuthSession();
           toast.error("Admins must sign in at /admin");
           setLoading(false);
           return;

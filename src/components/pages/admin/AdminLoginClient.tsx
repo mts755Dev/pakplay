@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { clearAuthSession } from "@/lib/sign-out";
 import { Loader2, Shield, ArrowLeft } from "lucide-react";
 import ppLogo from "@/assets/pp logo.png";
 import Image from "next/image";
@@ -49,7 +50,7 @@ export function AdminLoginClient() {
         if (profileError) throw profileError;
 
         if (profile?.role !== 'admin') {
-          await supabase.auth.signOut();
+          clearAuthSession();
           toast.error("Access denied. Admin credentials required.");
           return;
         }

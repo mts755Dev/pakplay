@@ -17,6 +17,7 @@ import { LocationSelector } from "@/components/LocationSelector";
 import { formatFullLocation } from "@/lib/locationHelpers";
 import ppLogo from "@/assets/pp logo.png";
 import { useAuth } from "@/contexts/AuthContext";
+import { signOutClient } from "@/lib/sign-out";
 
 export function OwnerOnboardingClient() {
   const router = useRouter();
@@ -491,10 +492,7 @@ export function OwnerOnboardingClient() {
             </Link>
             <Button 
               variant="outline" 
-              onClick={async () => {
-                await supabase.auth.signOut();
-                setUser(null);
-              }}
+              onClick={() => signOutClient('/')}
             >
               Sign Out
             </Button>
