@@ -8,9 +8,13 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Calendar, Tag, Percent, Edit, Trash2, Plus, ArrowLeft, Loader2 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { DashboardSidebar } from '@/components/DashboardSidebar';
+import {
+  deleteOwnerOffer,
+  saveOwnerOffer,
+  toggleOwnerOfferStatus,
+} from '@/lib/server-actions';
 import { Tables } from '@/integrations/supabase/types';
 import {
   Dialog,
@@ -60,6 +64,8 @@ export function OwnerSpecialOffersClient({
   const [isActive, setIsActive] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [offerToDelete, setOfferToDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [togglingOfferId, setTogglingOfferId] = useState<string | null>(null);
 
   // Auto-fill original price when venue is selected
   useEffect(() => {
@@ -142,26 +148,22 @@ export function OwnerSpecialOffersClient({
         is_active: isActive,
       };
 
-      if (editingOffer) {
-        const { data, error } = await supabase
-          .from('special_offers')
-          .update(offerData)
-          .eq('id', editingOffer.id)
-          .select()
-          .single();
+      const result = await saveOwnerOffer(
+        userId,
+        editingOffer?.id ?? null,
+        offerData
+      );
 
-        if (error) throw error;
-        setOffers((prev) => prev.map((o) => (o.id === editingOffer.id ? data : o)));
+      if (!result.success || !result.offer) {
+        toast.error(result.error || 'Failed to save offer');
+        return;
+      }
+
+      if (editingOffer) {
+        setOffers((prev) => prev.map((o) => (o.id === editingOffer.id ? result.offer! : o)));
         toast.success('Offer updated successfully!');
       } else {
-        const { data, error } = await supabase
-          .from('special_offers')
-          .insert([offerData])
-          .select()
-          .single();
-
-        if (error) throw error;
-        setOffers((prev) => [data, ...prev]);
+        setOffers((prev) => [result.offer!, ...prev]);
         toast.success('Offer created successfully!');
       }
 
@@ -179,39 +181,43 @@ export function OwnerSpecialOffersClient({
     setDeleteDialogOpen(true);
   };
 
-  const handleDelete = async () => {
-    if (!offerToDelete) return;
-
+  const handleDelete = async (offerId: string) => {
+    setDeleting(true);
     try {
-      const { error } = await supabase
-        .from('special_offers')
-        .delete()
-        .eq('id', offerToDelete);
+      const result = await deleteOwnerOffer(offerId, userId);
 
-      if (error) throw error;
-      setOffers((prev) => prev.filter((o) => o.id !== offerToDelete));
+      if (!result.success) {
+        toast.error(result.error || 'Failed to delete offer');
+        return;
+      }
+
+      setOffers((prev) => prev.filter((o) => o.id !== offerId));
       toast.success('Offer deleted successfully!');
       setDeleteDialogOpen(false);
       setOfferToDelete(null);
     } catch (error: any) {
       toast.error('Failed to delete offer');
+    } finally {
+      setDeleting(false);
     }
   };
 
   const toggleOfferStatus = async (offer: SpecialOffer) => {
+    setTogglingOfferId(offer.id);
     try {
-      const { data, error } = await supabase
-        .from('special_offers')
-        .update({ is_active: !offer.is_active })
-        .eq('id', offer.id)
-        .select()
-        .single();
+      const result = await toggleOwnerOfferStatus(offer.id, userId);
 
-      if (error) throw error;
-      setOffers((prev) => prev.map((o) => (o.id === offer.id ? data : o)));
+      if (!result.success || !result.offer) {
+        toast.error(result.error || 'Failed to update offer status');
+        return;
+      }
+
+      setOffers((prev) => prev.map((o) => (o.id === offer.id ? result.offer! : o)));
       toast.success(`Offer ${!offer.is_active ? 'activated' : 'deactivated'} successfully!`);
     } catch (error: any) {
       toast.error('Failed to update offer status');
+    } finally {
+      setTogglingOfferId(null);
     }
   };
 
@@ -461,8 +467,15 @@ export function OwnerSpecialOffersClient({
                           size="sm"
                           variant="outline"
                           onClick={() => toggleOfferStatus(offer)}
+                          disabled={togglingOfferId === offer.id}
                         >
-                          {offer.is_active ? 'Deactivate' : 'Activate'}
+                          {togglingOfferId === offer.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : offer.is_active ? (
+                            'Deactivate'
+                          ) : (
+                            'Activate'
+                          )}
                         </Button>
                          <Button
                            size="sm"
@@ -520,7 +533,15 @@ export function OwnerSpecialOffersClient({
           )}
 
           {/* Delete Confirmation Dialog */}
-          <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <Dialog
+            open={deleteDialogOpen}
+            onOpenChange={(open) => {
+              if (!open && !deleting) {
+                setDeleteDialogOpen(false);
+                setOfferToDelete(null);
+              }
+            }}
+          >
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Delete Special Offer</DialogTitle>
@@ -529,11 +550,26 @@ export function OwnerSpecialOffersClient({
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+                <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>
                   Cancel
                 </Button>
-                <Button variant="destructive" onClick={handleDelete}>
-                  Delete Offer
+                <Button
+                  variant="destructive"
+                  disabled={deleting || !offerToDelete}
+                  onClick={() => {
+                    if (offerToDelete) {
+                      handleDelete(offerToDelete);
+                    }
+                  }}
+                >
+                  {deleting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    'Delete Offer'
+                  )}
                 </Button>
               </DialogFooter>
             </DialogContent>

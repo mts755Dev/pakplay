@@ -910,7 +910,7 @@ export function OwnerVenueEditClient({ venueId, initialVenue }: OwnerVenueEditCl
 
               {/* Photos */}
               <div className="space-y-4 border-t pt-6">
-                <h2 className="text-2xl font-bold">Photos</h2>
+                <h2 className="text-2xl font-bold">Photos (min 1)</h2>
                 
                 {/* Existing Photos */}
                 <div className="grid grid-cols-4 gap-4">

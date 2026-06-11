@@ -36,7 +36,7 @@ export default async function OwnerBookingsPage() {
   
   return (
     <Suspense fallback={<div>Loading...</div>}>
-      <OwnerBookingsClient initialBookings={safeBookings} />
+      <OwnerBookingsClient initialBookings={safeBookings} userId={userWithRole.user.id} />
     </Suspense>
   );
 }

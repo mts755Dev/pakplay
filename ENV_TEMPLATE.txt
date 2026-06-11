@@ -11,6 +11,10 @@
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url_here
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key_here
 
+# Server-side mutations (recommended for production — Settings → API → service_role)
+# Without this, owner dashboard writes use the logged-in user's session via cookies.
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
+
 # Domain Configuration (Optional - for subdomain routing)
 NEXT_PUBLIC_DOMAIN=pakplay.co
 

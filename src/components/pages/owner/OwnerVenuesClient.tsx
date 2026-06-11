@@ -18,14 +18,20 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { LocationSelector } from "@/components/LocationSelector";
-import { fetchVenueLoyaltyTiers, saveVenueLoyaltyTiers } from "@/lib/server-actions";
+import {
+  fetchVenueForEdit,
+  fetchVenueLoyaltyTiers,
+  fetchVenueReviewsForOwner,
+  saveVenueLoyaltyTiers,
+} from "@/lib/server-actions";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface OwnerVenuesClientProps {
   initialVenues: any[];
+  userId: string;
 }
 
-export function OwnerVenuesClient({ initialVenues }: OwnerVenuesClientProps) {
+export function OwnerVenuesClient({ initialVenues, userId }: OwnerVenuesClientProps) {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   // Use initial venues from server - no loading needed!
@@ -70,6 +76,7 @@ export function OwnerVenuesClient({ initialVenues }: OwnerVenuesClientProps) {
   const [viewingReviewsVenue, setViewingReviewsVenue] = useState<any>(null);
   const [reviews, setReviews] = useState<any[]>([]);
   const [loadingReviews, setLoadingReviews] = useState(false);
+  const [editLoadingId, setEditLoadingId] = useState<string | null>(null);
   const [reportStatuses, setReportStatuses] = useState<Map<string, string>>(new Map());
   const [reportingReview, setReportingReview] = useState<any>(null);
   const [reportReason, setReportReason] = useState("");
@@ -142,15 +149,14 @@ export function OwnerVenuesClient({ initialVenues }: OwnerVenuesClientProps) {
   };
 
   const handleEditClick = async (venue: any) => {
+    setEditLoadingId(venue.id);
     try {
-      // Fetch complete venue data with pricing rules
-      const { data: venueData, error } = await supabase
-        .from('venues')
-        .select('*, venue_photos(*), venue_pricing_rules(*)')
-        .eq('id', venue.id)
-        .single();
+      const venueData = await fetchVenueForEdit(venue.id, userId);
 
-      if (error) throw error;
+      if (!venueData) {
+        toast.error("Failed to load venue details");
+        return;
+      }
 
       setEditingVenue(venueData);
       setExistingPhotos(venueData.venue_photos || []);
@@ -228,30 +234,27 @@ export function OwnerVenuesClient({ initialVenues }: OwnerVenuesClientProps) {
 
     } catch (error) {
       toast.error("Failed to load venue details");
+    } finally {
+      setEditLoadingId(null);
     }
   };
 
   const handleViewReviews = async (venue: any) => {
     setViewingReviewsVenue(venue);
     setLoadingReviews(true);
+    setReviews([]);
+    setReportStatuses(new Map());
     try {
-      const { data: reviewsData } = await supabase
-        .from('venue_reviews')
-        .select('*')
-        .eq('venue_id', venue.id)
-        .order('date', { ascending: false });
-      
-      setReviews(reviewsData || []);
+      const { reviews: reviewsData, reportStatuses, error } =
+        await fetchVenueReviewsForOwner(venue.id, userId);
 
-      // Fetch report statuses by this owner
-      const { data: reportsData } = await supabase
-        .from('review_reports')
-        .select('review_id, status')
-        .eq('venue_id', venue.id)
-        .eq('reporter_id', user.id);
-      
-      const statusMap = new Map(reportsData?.map(r => [r.review_id, r.status]) || []);
-      setReportStatuses(statusMap);
+      if (error) {
+        toast.error("Failed to load reviews");
+        return;
+      }
+
+      setReviews(reviewsData);
+      setReportStatuses(new Map(Object.entries(reportStatuses)));
     } catch (error) {
       toast.error("Failed to load reviews");
     } finally {
@@ -274,7 +277,7 @@ export function OwnerVenuesClient({ initialVenues }: OwnerVenuesClientProps) {
         .insert({
           review_id: reportingReview.id,
           venue_id: viewingReviewsVenue.id,
-          reporter_id: user.id,
+          reporter_id: userId,
           reason: reportReason,
         });
 
@@ -390,7 +393,7 @@ export function OwnerVenuesClient({ initialVenues }: OwnerVenuesClientProps) {
 
     try {
       // Upload logo if changed
-      const logoUrl = await uploadLogo(user!.id);
+      const logoUrl = await uploadLogo(userId);
 
       // Update venue
       const { error: venueError } = await supabase
@@ -428,7 +431,7 @@ export function OwnerVenuesClient({ initialVenues }: OwnerVenuesClientProps) {
 
       // Upload new photos
       if (newPhotos.length > 0) {
-        const photoUrls = await uploadNewPhotos(editingVenue.id, user!.id);
+        const photoUrls = await uploadNewPhotos(editingVenue.id, userId);
         if (photoUrls.length > 0) {
           const photoInserts = photoUrls.map((url, index) => ({
             venue_id: editingVenue.id,
@@ -490,7 +493,7 @@ export function OwnerVenuesClient({ initialVenues }: OwnerVenuesClientProps) {
 
       toast.success("Venue updated successfully!");
       setEditingVenue(null);
-      fetchVenues(user!.id);
+      fetchVenues(userId);
     } catch (error: any) {
       toast.error(error.message || "Failed to update venue");
     } finally {
@@ -512,7 +515,7 @@ export function OwnerVenuesClient({ initialVenues }: OwnerVenuesClientProps) {
 
       toast.success("Venue deleted successfully");
       setDeletingVenueId(null);
-      fetchVenues(user!.id);
+      fetchVenues(userId);
     } catch (error: any) {
       toast.error(error.message || "Failed to delete venue");
     }
@@ -612,8 +615,17 @@ export function OwnerVenuesClient({ initialVenues }: OwnerVenuesClientProps) {
                               </Button>
                             </Link>
                           )}
-                          <Button variant="outline" size="sm" onClick={() => handleEditClick(venue)}>
-                            <Edit className="w-4 h-4 mr-2" />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleEditClick(venue)}
+                            disabled={editLoadingId === venue.id}
+                          >
+                            {editLoadingId === venue.id ? (
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                              <Edit className="w-4 h-4 mr-2" />
+                            )}
                             Edit
                           </Button>
                           <Button variant="outline" size="sm" onClick={() => handleViewReviews(venue)}>
@@ -1071,7 +1083,7 @@ export function OwnerVenuesClient({ initialVenues }: OwnerVenuesClientProps) {
 
               {/* Photos - Compact */}
               <div className="space-y-3 border-t pt-4">
-                <h3 className="font-semibold text-sm">Photos (min 3)</h3>
+                <h3 className="font-semibold text-sm">Photos (min 1)</h3>
                 
                 <div className="grid grid-cols-5 gap-2">
                   {existingPhotos.filter(p => !photosToDelete.includes(p.id)).map((photo) => (

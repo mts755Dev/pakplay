@@ -37,6 +37,7 @@ export default async function OwnerVenuesPage() {
   return (
     <OwnerVenuesClient
       initialVenues={dashboardData.venues}
+      userId={userWithRole.user.id}
     />
   );
 }

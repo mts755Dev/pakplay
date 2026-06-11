@@ -3,6 +3,7 @@
 "use server";
 
 import { supabaseServer } from './supabase-server';
+import { getOwnerActionSupabase } from './supabase-owner';
 import { Tables, Database } from '@/integrations/supabase/types';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
@@ -450,16 +451,63 @@ export async function fetchOwnerDashboard(userId: string): Promise<OwnerDashboar
 }
 
 /**
+ * Fetch reviews and report statuses for an owner's venue
+ */
+export async function fetchVenueReviewsForOwner(venueId: string, userId: string) {
+  try {
+    const supabase = await getOwnerActionSupabase();
+    const { data: venue, error: venueError } = await supabase
+      .from('venues')
+      .select('id')
+      .eq('id', venueId)
+      .eq('owner_id', userId)
+      .maybeSingle();
+
+    if (venueError || !venue) {
+      return { reviews: [], reportStatuses: {} as Record<string, string>, error: 'Venue not found' };
+    }
+
+    const [reviewsResult, reportsResult] = await Promise.all([
+      supabase
+        .from('venue_reviews')
+        .select('*')
+        .eq('venue_id', venueId)
+        .order('date', { ascending: false }),
+      supabase
+        .from('review_reports')
+        .select('review_id, status')
+        .eq('venue_id', venueId)
+        .eq('reporter_id', userId),
+    ]);
+
+    const reportStatuses: Record<string, string> = {};
+    (reportsResult.data || []).forEach((r) => {
+      reportStatuses[r.review_id] = r.status;
+    });
+
+    return {
+      reviews: reviewsResult.data || [],
+      reportStatuses,
+      error: reviewsResult.error?.message || null,
+    };
+  } catch (error: any) {
+    console.error('Error fetching venue reviews:', error);
+    return { reviews: [], reportStatuses: {} as Record<string, string>, error: error.message };
+  }
+}
+
+/**
  * Fetch a specific venue for editing (includes photos and pricing rules)
  */
 export async function fetchVenueForEdit(venueId: string, userId: string) {
   try {
-    const { data: venueData, error } = await supabaseServer
+    const supabase = await getOwnerActionSupabase();
+    const { data: venueData, error } = await supabase
       .from('venues')
       .select('*, venue_photos(*), venue_pricing_rules(*)')
       .eq('id', venueId)
       .eq('owner_id', userId)
-      .single();
+      .maybeSingle();
 
     if (error || !venueData) {
       return null;
@@ -469,6 +517,89 @@ export async function fetchVenueForEdit(venueId: string, userId: string) {
   } catch (error) {
     console.error('Error fetching venue for edit:', error);
     return null;
+  }
+}
+
+/**
+ * Verify a booking belongs to one of the owner's venues
+ */
+async function verifyOwnerBookingAccess(bookingId: string, userId: string) {
+  const supabase = await getOwnerActionSupabase();
+  const { data: booking, error } = await supabase
+    .from('bookings')
+    .select('id, venue_id')
+    .eq('id', bookingId)
+    .maybeSingle();
+
+  if (error || !booking) {
+    return { ok: false as const, error: 'Booking not found' };
+  }
+
+  const { data: venue, error: venueError } = await supabase
+    .from('venues')
+    .select('id')
+    .eq('id', booking.venue_id)
+    .eq('owner_id', userId)
+    .maybeSingle();
+
+  if (venueError || !venue) {
+    return { ok: false as const, error: 'Not authorized to manage this booking' };
+  }
+
+  return { ok: true as const, bookingId: booking.id };
+}
+
+/**
+ * Delete a booking (owner must own the venue)
+ */
+export async function deleteOwnerBooking(bookingId: string, userId: string) {
+  try {
+    const access = await verifyOwnerBookingAccess(bookingId, userId);
+    if (!access.ok) {
+      return { success: false, error: access.error };
+    }
+
+    const supabase = await getOwnerActionSupabase();
+    const { error } = await supabase
+      .from('bookings')
+      .delete()
+      .eq('id', bookingId);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, error: null };
+  } catch (error: any) {
+    console.error('Error deleting owner booking:', error);
+    return { success: false, error: error.message || 'Failed to delete booking' };
+  }
+}
+
+/**
+ * Confirm a pending booking (owner must own the venue)
+ */
+export async function confirmOwnerBooking(bookingId: string, userId: string) {
+  try {
+    const access = await verifyOwnerBookingAccess(bookingId, userId);
+    if (!access.ok) {
+      return { success: false, error: access.error };
+    }
+
+    const supabase = await getOwnerActionSupabase();
+    const { error } = await supabase
+      .from('bookings')
+      .update({ status: 'confirmed' })
+      .eq('id', bookingId);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, error: null };
+  } catch (error: any) {
+    console.error('Error confirming owner booking:', error);
+    return { success: false, error: error.message || 'Failed to confirm booking' };
   }
 }
 
@@ -929,6 +1060,187 @@ export async function fetchOwnerOffersServer(userId: string) {
   } catch (error: any) {
     console.error('Error fetching owner offers:', error);
     return { data: [], error: error.message };
+  }
+}
+
+async function verifyOwnerVenueAccess(venueId: string, userId: string) {
+  const supabase = await getOwnerActionSupabase();
+  const { data: venue, error } = await supabase
+    .from('venues')
+    .select('id')
+    .eq('id', venueId)
+    .eq('owner_id', userId)
+    .maybeSingle();
+
+  if (error || !venue) {
+    return { ok: false as const, error: 'Not authorized to manage this venue' };
+  }
+
+  return { ok: true as const };
+}
+
+async function verifyOwnerOfferAccess(offerId: string, userId: string) {
+  const supabase = await getOwnerActionSupabase();
+  const { data: offer, error } = await supabase
+    .from('special_offers')
+    .select('*')
+    .eq('id', offerId)
+    .maybeSingle();
+
+  if (error || !offer) {
+    return { ok: false as const, error: 'Offer not found' };
+  }
+
+  const venueAccess = await verifyOwnerVenueAccess(offer.venue_id, userId);
+  if (!venueAccess.ok) {
+    return { ok: false as const, error: venueAccess.error };
+  }
+
+  return { ok: true as const, offer };
+}
+
+export async function deleteOwnerOffer(offerId: string, userId: string) {
+  try {
+    const access = await verifyOwnerOfferAccess(offerId, userId);
+    if (!access.ok) {
+      return { success: false, error: access.error };
+    }
+
+    const supabase = await getOwnerActionSupabase();
+    const { error } = await supabase
+      .from('special_offers')
+      .delete()
+      .eq('id', offerId);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, error: null };
+  } catch (error: any) {
+    console.error('Error deleting owner offer:', error);
+    return { success: false, error: error.message || 'Failed to delete offer' };
+  }
+}
+
+export async function toggleOwnerOfferStatus(offerId: string, userId: string) {
+  try {
+    const access = await verifyOwnerOfferAccess(offerId, userId);
+    if (!access.ok) {
+      return { success: false, offer: null, error: access.error };
+    }
+
+    const supabase = await getOwnerActionSupabase();
+    const newActive = !access.offer.is_active;
+
+    const { error: updateError } = await supabase
+      .from('special_offers')
+      .update({ is_active: newActive })
+      .eq('id', offerId);
+
+    if (updateError) {
+      return { success: false, offer: null, error: updateError.message };
+    }
+
+    const { data, error: fetchError } = await supabase
+      .from('special_offers')
+      .select('*')
+      .eq('id', offerId)
+      .maybeSingle();
+
+    if (fetchError || !data) {
+      return {
+        success: true,
+        offer: { ...access.offer, is_active: newActive },
+        error: null,
+      };
+    }
+
+    return { success: true, offer: data, error: null };
+  } catch (error: any) {
+    console.error('Error toggling owner offer:', error);
+    return { success: false, offer: null, error: error.message || 'Failed to update offer status' };
+  }
+}
+
+export type OwnerOfferInput = {
+  venue_id: string;
+  offer_name: string;
+  description: string | null;
+  original_price: number;
+  offer_price: number;
+  valid_from: string;
+  valid_until: string;
+  is_active: boolean;
+};
+
+export async function saveOwnerOffer(
+  userId: string,
+  offerId: string | null,
+  input: OwnerOfferInput
+) {
+  try {
+    const venueAccess = await verifyOwnerVenueAccess(input.venue_id, userId);
+    if (!venueAccess.ok) {
+      return { success: false, offer: null, error: venueAccess.error };
+    }
+
+    if (offerId) {
+      const access = await verifyOwnerOfferAccess(offerId, userId);
+      if (!access.ok) {
+        return { success: false, offer: null, error: access.error };
+      }
+    }
+
+    const discount_percentage =
+      input.original_price > 0
+        ? ((input.original_price - input.offer_price) / input.original_price) * 100
+        : 0;
+
+    const payload = {
+      ...input,
+      discount_percentage,
+    };
+
+    const supabase = await getOwnerActionSupabase();
+
+    if (offerId) {
+      const { error: updateError } = await supabase
+        .from('special_offers')
+        .update(payload)
+        .eq('id', offerId);
+
+      if (updateError) {
+        return { success: false, offer: null, error: updateError.message };
+      }
+
+      const { data, error: fetchError } = await supabase
+        .from('special_offers')
+        .select('*')
+        .eq('id', offerId)
+        .maybeSingle();
+
+      if (fetchError || !data) {
+        return { success: false, offer: null, error: fetchError?.message || 'Failed to load updated offer' };
+      }
+
+      return { success: true, offer: data, error: null };
+    }
+
+    const { data, error } = await supabase
+      .from('special_offers')
+      .insert([payload])
+      .select('*')
+      .maybeSingle();
+
+    if (error || !data) {
+      return { success: false, offer: null, error: error?.message || 'Failed to create offer' };
+    }
+
+    return { success: true, offer: data, error: null };
+  } catch (error: any) {
+    console.error('Error saving owner offer:', error);
+    return { success: false, offer: null, error: error.message || 'Failed to save offer' };
   }
 }
 
