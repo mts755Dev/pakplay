@@ -41,6 +41,7 @@ export function OwnerOnboardingClient() {
     subArea: "",
     address: "",
     pricePerHour: "",
+    numberOfCourts: "1",
     phone: "",
     openingTime: "",
     closingTime: "",
@@ -296,6 +297,7 @@ export function OwnerOnboardingClient() {
           description: formData.description,
           amenities: formData.amenities.length > 0 ? formData.amenities : null,
           price_per_hour: parseFloat(formData.pricePerHour),
+          number_of_courts: parseInt(formData.numberOfCourts, 10),
           opening_time: formData.is24_7 ? null : formData.openingTime,
           closing_time: formData.is24_7 ? null : formData.closingTime,
           is_24_7: formData.is24_7,
@@ -392,6 +394,11 @@ export function OwnerOnboardingClient() {
     if (step === 1) {
       if (!formData.venueName || !formData.sport || !formData.city || !formData.address) {
         toast.error("Please fill in all required fields");
+        return;
+      }
+      const courts = parseInt(formData.numberOfCourts, 10);
+      if (!Number.isFinite(courts) || courts < 1) {
+        toast.error("Please enter at least 1 court");
         return;
       }
     }
@@ -552,6 +559,27 @@ export function OwnerOnboardingClient() {
                       <SelectItem value="padel">Padel</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div>
+                  <Label htmlFor="numberOfCourts">Number of Courts *</Label>
+                  <Input
+                    id="numberOfCourts"
+                    type="number"
+                    min="1"
+                    step="1"
+                    placeholder="e.g., 2"
+                    value={formData.numberOfCourts}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value, 10);
+                      if (e.target.value === "" || value >= 1) {
+                        setFormData({ ...formData, numberOfCourts: e.target.value });
+                      }
+                    }}
+                  />
+                  <p className="text-sm text-muted-foreground mt-1">
+                    How many courts or fields can be booked at this venue?
+                  </p>
                 </div>
 
                 <div>

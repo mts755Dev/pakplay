@@ -71,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(session.user);
           const { data: profile } = await supabase
             .from('profiles')
-            .select('role')
+            .select('role, full_name, phone, whatsapp_number')
             .eq('id', session.user.id)
             .single();
 
@@ -83,6 +83,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             localStorage.setItem('user_logged_in', 'true');
             localStorage.setItem('user_id', session.user.id);
             localStorage.setItem('user_email', session.user.email || '');
+            if (profile.full_name) localStorage.setItem('user_full_name', profile.full_name);
+            if (profile.phone || profile.whatsapp_number) {
+              localStorage.setItem('user_phone', profile.phone || profile.whatsapp_number || '');
+            }
           }
         } else {
           setUser(null);
@@ -91,6 +95,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           localStorage.removeItem('user_logged_in');
           localStorage.removeItem('user_id');
           localStorage.removeItem('user_email');
+          localStorage.removeItem('user_full_name');
+          localStorage.removeItem('user_phone');
         }
       } catch (error) {
         // Silent fail
@@ -109,7 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(session.user);
           const { data: profile } = await supabase
             .from('profiles')
-            .select('role')
+            .select('role, full_name, phone, whatsapp_number')
             .eq('id', session.user.id)
             .single();
 
@@ -121,6 +127,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             localStorage.setItem('user_logged_in', 'true');
             localStorage.setItem('user_id', session.user.id);
             localStorage.setItem('user_email', session.user.email || '');
+            if (profile.full_name) localStorage.setItem('user_full_name', profile.full_name);
+            if (profile.phone || profile.whatsapp_number) {
+              localStorage.setItem('user_phone', profile.phone || profile.whatsapp_number || '');
+            }
           }
         } else {
           setUser(null);
@@ -129,6 +139,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           localStorage.removeItem('user_logged_in');
           localStorage.removeItem('user_id');
           localStorage.removeItem('user_email');
+          localStorage.removeItem('user_full_name');
+          localStorage.removeItem('user_phone');
         }
         setAuthReady(true);
       } catch (error) {

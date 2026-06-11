@@ -13,16 +13,17 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Edit, Trash2, Building2, DollarSign, Calendar, Eye, Upload, X, Clock, Phone, MapPin, Building, Loader2 } from "lucide-react";
+import { Plus, Edit, Trash2, Building2, DollarSign, Calendar, Eye, Upload, X, Clock, Phone, MapPin, Building, Loader2, LayoutGrid } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { LocationSelector } from "@/components/LocationSelector";
+import { uploadVenueLogo, uploadVenuePhotos } from "@/lib/file-utils";
 import {
   fetchVenueForEdit,
   fetchVenueLoyaltyTiers,
   fetchVenueReviewsForOwner,
-  saveVenueLoyaltyTiers,
+  updateOwnerVenue,
 } from "@/lib/server-actions";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -59,6 +60,7 @@ export function OwnerVenuesClient({ initialVenues, userId }: OwnerVenuesClientPr
     subArea: "",
     address: "",
     pricePerHour: "",
+    numberOfCourts: "1",
     phone: "",
     openingTime: "",
     closingTime: "",
@@ -124,6 +126,10 @@ export function OwnerVenuesClient({ initialVenues, userId }: OwnerVenuesClientPr
   ];
 
   const { user: authUser, authReady } = useAuth();
+
+  useEffect(() => {
+    setVenues(initialVenues);
+  }, [initialVenues]);
   
   // Get user for update/delete operations from AuthContext (no network call)
   useEffect(() => {
@@ -182,6 +188,7 @@ export function OwnerVenuesClient({ initialVenues, userId }: OwnerVenuesClientPr
         subArea: venueData.sub_area || "",
         address: venueData.address || "",
         pricePerHour: venueData.price_per_hour?.toString() || "",
+        numberOfCourts: venueData.number_of_courts?.toString() || "1",
         phone: venueData.whatsapp_number || "",
         openingTime: venueData.opening_time || "",
         closingTime: venueData.closing_time || "",
@@ -308,29 +315,6 @@ export function OwnerVenuesClient({ initialVenues, userId }: OwnerVenuesClientPr
     }
   };
 
-  const uploadLogo = async (userId: string) => {
-    if (!logo && !logoPreview) return null;
-    if (!logo) return logoPreview; // Return existing logo URL if no new logo
-
-    const fileExt = logo.name.split('.').pop();
-    const fileName = `${userId}/${editingVenue.id}/logo.${fileExt}`;
-
-    const { error } = await supabase.storage
-      .from('venue-logos')
-      .upload(fileName, logo, { upsert: true });
-
-    if (error) {
-      // Logo upload error - return existing logo URL
-      return logoPreview;
-    }
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('venue-logos')
-      .getPublicUrl(fileName);
-
-    return publicUrl;
-  };
-
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     const totalPhotos = existingPhotos.length - photosToDelete.length + newPhotos.length + files.length;
@@ -350,35 +334,17 @@ export function OwnerVenuesClient({ initialVenues, userId }: OwnerVenuesClientPr
     });
   };
 
-  const uploadNewPhotos = async (venueId: string, userId: string) => {
-    const uploadedUrls: string[] = [];
-    for (let i = 0; i < newPhotos.length; i++) {
-      const photo = newPhotos[i];
-      const fileExt = photo.name.split('.').pop();
-      const fileName = `${userId}/${venueId}/${Date.now()}_${i}.${fileExt}`;
-
-      const { error } = await supabase.storage
-        .from('venue-photos')
-        .upload(fileName, photo);
-
-      if (error) {
-        continue;
-      }
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('venue-photos')
-        .getPublicUrl(fileName);
-
-      uploadedUrls.push(publicUrl);
-    }
-    return uploadedUrls;
-  };
-
   const handleSave = async () => {
     if (!editingVenue) return;
 
     if (!formData.venueName || !formData.sport || !formData.city || !formData.address) {
       toast.error("Please fill in all required fields");
+      return;
+    }
+
+    const numberOfCourts = parseInt(formData.numberOfCourts, 10);
+    if (!Number.isFinite(numberOfCourts) || numberOfCourts < 1) {
+      toast.error("Please enter at least 1 court");
       return;
     }
 
@@ -392,13 +358,34 @@ export function OwnerVenuesClient({ initialVenues, userId }: OwnerVenuesClientPr
     setUploading(newPhotos.length > 0);
 
     try {
-      // Upload logo if changed
-      const logoUrl = await uploadLogo(userId);
+      let logoUrl: string | null = logoPreview || null;
+      if (logo) {
+        const logoResult = await uploadVenueLogo(userId, editingVenue.id, logo);
+        if (logoResult.url) {
+          logoUrl = logoResult.url;
+        } else if (logoResult.error) {
+          console.error('Logo upload error:', logoResult.error);
+        }
+      }
 
-      // Update venue
-      const { error: venueError } = await supabase
-        .from('venues')
-        .update({
+      let uploadedPhotoUrls: string[] = [];
+      if (newPhotos.length > 0) {
+        const photoResult = await uploadVenuePhotos(userId, editingVenue.id, newPhotos);
+        if (photoResult.error) {
+          toast.error(photoResult.error);
+          return;
+        }
+        uploadedPhotoUrls = photoResult.urls;
+      }
+
+      const validTiers = loyaltyTiers.filter(
+        (t) => t.tier_name.trim() && parseInt(t.min_bookings) > 0 && parseFloat(t.discount_percent) > 0
+      );
+
+      const result = await updateOwnerVenue(
+        userId,
+        editingVenue.id,
+        {
           name: formData.venueName,
           sport_type: formData.sport as 'cricket' | 'football' | 'futsal' | 'pickleball' | 'badminton' | 'padel',
           province: formData.province || null,
@@ -409,91 +396,38 @@ export function OwnerVenuesClient({ initialVenues, userId }: OwnerVenuesClientPr
           description: formData.description,
           amenities: formData.amenities.length > 0 ? formData.amenities : null,
           price_per_hour: parseFloat(formData.pricePerHour),
+          number_of_courts: numberOfCourts,
           opening_time: formData.is24_7 ? null : formData.openingTime,
           closing_time: formData.is24_7 ? null : formData.closingTime,
           is_24_7: formData.is24_7,
           whatsapp_number: formData.phone,
-          // Customization fields
           logo_url: logoUrl,
           tagline: formData.tagline || null,
           facebook_url: formData.facebookUrl || null,
           instagram_url: formData.instagramUrl || null,
           google_maps_url: formData.googleMapsUrl || null,
-        })
-        .eq('id', editingVenue.id);
-
-      if (venueError) throw venueError;
-
-      // Delete marked photos
-      if (photosToDelete.length > 0) {
-        await supabase.from('venue_photos').delete().in('id', photosToDelete);
-      }
-
-      // Upload new photos
-      if (newPhotos.length > 0) {
-        const photoUrls = await uploadNewPhotos(editingVenue.id, userId);
-        if (photoUrls.length > 0) {
-          const photoInserts = photoUrls.map((url, index) => ({
-            venue_id: editingVenue.id,
-            photo_url: url,
-            is_primary: remainingPhotos === 0 && index === 0,
-            display_order: remainingPhotos + index,
-          }));
-          await supabase.from('venue_photos').insert(photoInserts);
+        },
+        {
+          photosToDelete,
+          newPhotoUrls: uploadedPhotoUrls,
+          remainingPhotoCount: remainingPhotos,
+          pricingRules,
+          loyaltyTiers: validTiers.map((t) => ({
+            tier_name: t.tier_name.trim(),
+            min_bookings: parseInt(t.min_bookings),
+            discount_percent: parseFloat(t.discount_percent),
+          })),
         }
-      }
-
-      // Update pricing rules
-      await supabase.from('venue_pricing_rules').delete().eq('venue_id', editingVenue.id);
-      if (pricingRules.length > 0) {
-        const pricingInserts: any[] = [];
-        pricingRules.forEach((rule, index) => {
-          if (rule.daysOfWeek.length === 0) {
-            pricingInserts.push({
-              venue_id: editingVenue.id,
-              day_of_week: null,
-              start_time: rule.startTime || null,
-              end_time: rule.endTime || null,
-              price_per_hour: parseFloat(rule.price),
-              priority: index,
-            });
-          } else {
-            rule.daysOfWeek.forEach(day => {
-              pricingInserts.push({
-                venue_id: editingVenue.id,
-                day_of_week: parseInt(day),
-                start_time: rule.startTime || null,
-                end_time: rule.endTime || null,
-                price_per_hour: parseFloat(rule.price),
-                priority: index,
-              });
-            });
-          }
-        });
-        if (pricingInserts.length > 0) {
-          await supabase.from('venue_pricing_rules').insert(pricingInserts);
-        }
-      }
-
-      // Save loyalty tiers
-      const validTiers = loyaltyTiers.filter(
-        t => t.tier_name.trim() && parseInt(t.min_bookings) > 0 && parseFloat(t.discount_percent) > 0
       );
-      const { error: loyaltyError } = await saveVenueLoyaltyTiers(
-        editingVenue.id,
-        validTiers.map(t => ({
-          tier_name: t.tier_name.trim(),
-          min_bookings: parseInt(t.min_bookings),
-          discount_percent: parseFloat(t.discount_percent),
-        }))
-      );
-      if (loyaltyError) {
-        console.error('Error saving loyalty tiers:', loyaltyError);
+
+      if (!result.success) {
+        toast.error(result.error || "Failed to update venue");
+        return;
       }
 
       toast.success("Venue updated successfully!");
       setEditingVenue(null);
-      fetchVenues(userId);
+      router.refresh();
     } catch (error: any) {
       toast.error(error.message || "Failed to update venue");
     } finally {
@@ -599,6 +533,10 @@ export function OwnerVenuesClient({ initialVenues, userId }: OwnerVenuesClientPr
                           <div className="flex items-center gap-2">
                             <DollarSign className="w-4 h-4 text-muted-foreground" />
                             <span className="text-sm">PKR {venue.price_per_hour}/hr</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <LayoutGrid className="w-4 h-4 text-muted-foreground" />
+                            <span className="text-sm">{venue.number_of_courts ?? 1} court{(venue.number_of_courts ?? 1) === 1 ? '' : 's'}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <Calendar className="w-4 h-4 text-muted-foreground" />
@@ -715,19 +653,37 @@ export function OwnerVenuesClient({ initialVenues, userId }: OwnerVenuesClientPr
                   />
                   </div>
 
-                  <div>
-                    <Label htmlFor="pricePerHour">Price per Hour (PKR) *</Label>
-                    <Input 
-                      id="pricePerHour" 
-                      type="number"
-                      min="0"
-                      value={formData.pricePerHour}
-                      onChange={(e) => {
-                        const value = parseFloat(e.target.value);
-                        if (value >= 0) setFormData({...formData, pricePerHour: e.target.value});
-                      }}
-                    />
-                </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="pricePerHour">Price per Hour (PKR) *</Label>
+                      <Input 
+                        id="pricePerHour" 
+                        type="number"
+                        min="0"
+                        value={formData.pricePerHour}
+                        onChange={(e) => {
+                          const value = parseFloat(e.target.value);
+                          if (value >= 0) setFormData({...formData, pricePerHour: e.target.value});
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="numberOfCourts">Number of Courts *</Label>
+                      <Input
+                        id="numberOfCourts"
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={formData.numberOfCourts}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value, 10);
+                          if (e.target.value === "" || value >= 1) {
+                            setFormData({ ...formData, numberOfCourts: e.target.value });
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
 
                 <div>
                   <Label htmlFor="address">Address *</Label>

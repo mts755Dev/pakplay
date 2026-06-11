@@ -4,6 +4,8 @@
 
 import { supabaseServer } from './supabase-server';
 import { getOwnerActionSupabase } from './supabase-owner';
+import { bookingToInterval, getCourtAvailability } from './court-availability';
+import { resolvePlayerBookingDetails } from './player-profile';
 import { Tables, Database } from '@/integrations/supabase/types';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
@@ -520,6 +522,230 @@ export async function fetchVenueForEdit(venueId: string, userId: string) {
   }
 }
 
+export type OwnerVenueUpdateInput = {
+  name: string;
+  sport_type: 'cricket' | 'football' | 'futsal' | 'pickleball' | 'badminton' | 'padel';
+  province: string | null;
+  city: string;
+  area: string | null;
+  sub_area: string | null;
+  address: string;
+  description: string;
+  amenities: string[] | null;
+  price_per_hour: number;
+  number_of_courts: number;
+  opening_time: string | null;
+  closing_time: string | null;
+  is_24_7: boolean;
+  whatsapp_number: string;
+  logo_url: string | null;
+  tagline: string | null;
+  facebook_url: string | null;
+  instagram_url: string | null;
+  google_maps_url: string | null;
+};
+
+export type OwnerPricingRuleInput = {
+  daysOfWeek: string[];
+  startTime: string;
+  endTime: string;
+  price: string;
+};
+
+/**
+ * Update an owner's venue (DB writes via authenticated server client)
+ */
+export async function updateOwnerVenue(
+  userId: string,
+  venueId: string,
+  venueData: OwnerVenueUpdateInput,
+  options: {
+    photosToDelete: string[];
+    newPhotoUrls: string[];
+    remainingPhotoCount: number;
+    pricingRules: OwnerPricingRuleInput[];
+    loyaltyTiers: Array<{ tier_name: string; min_bookings: number; discount_percent: number }>;
+  }
+) {
+  try {
+    const venueAccess = await verifyOwnerVenueAccess(venueId, userId);
+    if (!venueAccess.ok) {
+      return { success: false, error: venueAccess.error };
+    }
+
+    const supabase = await getOwnerActionSupabase();
+
+    const { error: venueError } = await supabase
+      .from('venues')
+      .update(venueData)
+      .eq('id', venueId);
+
+    if (venueError) {
+      return { success: false, error: venueError.message };
+    }
+
+    if (options.photosToDelete.length > 0) {
+      const { error } = await supabase
+        .from('venue_photos')
+        .delete()
+        .in('id', options.photosToDelete)
+        .eq('venue_id', venueId);
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+    }
+
+    if (options.newPhotoUrls.length > 0) {
+      const photoInserts = options.newPhotoUrls.map((url, index) => ({
+        venue_id: venueId,
+        photo_url: url,
+        is_primary: options.remainingPhotoCount === 0 && index === 0,
+        display_order: options.remainingPhotoCount + index,
+      }));
+
+      const { error } = await supabase.from('venue_photos').insert(photoInserts);
+      if (error) {
+        return { success: false, error: error.message };
+      }
+    }
+
+    const { error: deleteRulesError } = await supabase
+      .from('venue_pricing_rules')
+      .delete()
+      .eq('venue_id', venueId);
+
+    if (deleteRulesError) {
+      return { success: false, error: deleteRulesError.message };
+    }
+
+    if (options.pricingRules.length > 0) {
+      const pricingInserts: Array<{
+        venue_id: string;
+        day_of_week: number | null;
+        start_time: string | null;
+        end_time: string | null;
+        price_per_hour: number;
+        priority: number;
+      }> = [];
+
+      options.pricingRules.forEach((rule, index) => {
+        if (rule.daysOfWeek.length === 0) {
+          pricingInserts.push({
+            venue_id: venueId,
+            day_of_week: null,
+            start_time: rule.startTime || null,
+            end_time: rule.endTime || null,
+            price_per_hour: parseFloat(rule.price),
+            priority: index,
+          });
+        } else {
+          rule.daysOfWeek.forEach((day) => {
+            pricingInserts.push({
+              venue_id: venueId,
+              day_of_week: parseInt(day, 10),
+              start_time: rule.startTime || null,
+              end_time: rule.endTime || null,
+              price_per_hour: parseFloat(rule.price),
+              priority: index,
+            });
+          });
+        }
+      });
+
+      if (pricingInserts.length > 0) {
+        const { error } = await supabase
+          .from('venue_pricing_rules')
+          .insert(pricingInserts as never);
+        if (error) {
+          return { success: false, error: error.message };
+        }
+      }
+    }
+
+    const loyaltyResult = await saveVenueLoyaltyTiers(venueId, options.loyaltyTiers);
+    if (loyaltyResult.error) {
+      return { success: false, error: loyaltyResult.error };
+    }
+
+    return { success: true, error: null };
+  } catch (error: any) {
+    console.error('Error updating owner venue:', error);
+    return { success: false, error: error.message || 'Failed to update venue' };
+  }
+}
+
+export async function createVenuePhotoUploadUrl(
+  userId: string,
+  venueId: string,
+  fileName: string,
+  contentType: string,
+  index = 0
+) {
+  try {
+    const venueAccess = await verifyOwnerVenueAccess(venueId, userId);
+    if (!venueAccess.ok) {
+      return { signedUrl: null, publicUrl: null, error: venueAccess.error };
+    }
+
+    const supabase = await getOwnerActionSupabase();
+    const fileExt = fileName.split('.').pop() || 'jpg';
+    const storagePath = `${userId}/${venueId}/${Date.now()}_${index}.${fileExt}`;
+
+    const { data, error } = await supabase.storage
+      .from('venue-photos')
+      .createSignedUploadUrl(storagePath);
+
+    if (error || !data?.signedUrl) {
+      return { signedUrl: null, publicUrl: null, error: error?.message || 'Failed to create upload URL' };
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('venue-photos')
+      .getPublicUrl(storagePath);
+
+    return { signedUrl: data.signedUrl, publicUrl, error: null };
+  } catch (error: any) {
+    console.error('Error creating venue photo upload URL:', error);
+    return { signedUrl: null, publicUrl: null, error: error.message || 'Failed to create upload URL' };
+  }
+}
+
+export async function createVenueLogoUploadUrl(
+  userId: string,
+  venueId: string,
+  fileName: string,
+  contentType: string
+) {
+  try {
+    const venueAccess = await verifyOwnerVenueAccess(venueId, userId);
+    if (!venueAccess.ok) {
+      return { signedUrl: null, publicUrl: null, error: venueAccess.error };
+    }
+
+    const supabase = await getOwnerActionSupabase();
+    const fileExt = fileName.split('.').pop() || 'png';
+    const storagePath = `${userId}/${venueId}/logo.${fileExt}`;
+
+    const { data, error } = await supabase.storage
+      .from('venue-logos')
+      .createSignedUploadUrl(storagePath, { upsert: true });
+
+    if (error || !data?.signedUrl) {
+      return { signedUrl: null, publicUrl: null, error: error?.message || 'Failed to create upload URL' };
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('venue-logos')
+      .getPublicUrl(storagePath);
+
+    return { signedUrl: data.signedUrl, publicUrl, error: null };
+  } catch (error: any) {
+    console.error('Error creating venue logo upload URL:', error);
+    return { signedUrl: null, publicUrl: null, error: error.message || 'Failed to create upload URL' };
+  }
+}
+
 /**
  * Verify a booking belongs to one of the owner's venues
  */
@@ -909,28 +1135,7 @@ export async function saveVenueLoyaltyTiers(
   tiers: Array<{ tier_name: string; min_bookings: number; discount_percent: number }>
 ) {
   try {
-    // Get authenticated user's supabase client
-    const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll();
-          },
-          setAll(cookiesToSet) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              );
-            } catch {
-              // Ignore errors in Server Components
-            }
-          },
-        },
-      }
-    );
+    const supabase = await getOwnerActionSupabase();
 
     // Delete existing tiers for this venue
     const { error: deleteError } = await supabase
@@ -960,6 +1165,159 @@ export async function saveVenueLoyaltyTiers(
   } catch (error: any) {
     console.error('Error saving loyalty tiers:', error);
     return { error: error.message || 'Failed to save loyalty tiers' };
+  }
+}
+
+const BOOKING_CAPACITY_STATUSES = ['pending', 'confirmed'] as const;
+
+export type VenueDayBooking = {
+  start_time: string;
+  end_time: string;
+};
+
+/**
+ * Bookings that consume court capacity for a venue on a given date.
+ */
+export async function fetchVenueBookingsForDate(venueId: string, bookingDate: string) {
+  try {
+    const { data, error } = await supabaseServer
+      .from('bookings')
+      .select('start_time, end_time, status')
+      .eq('venue_id', venueId)
+      .eq('booking_date', bookingDate)
+      .in('status', [...BOOKING_CAPACITY_STATUSES]);
+
+    if (error) {
+      return { bookings: [] as VenueDayBooking[], error: error.message };
+    }
+
+    const bookings = (data || []).map((row) => ({
+      start_time: row.start_time,
+      end_time: row.end_time,
+    }));
+
+    return { bookings, error: null };
+  } catch (error: any) {
+    console.error('Error fetching venue bookings for date:', error);
+    return { bookings: [] as VenueDayBooking[], error: error.message || 'Failed to fetch bookings' };
+  }
+}
+
+export async function checkCourtAvailability(
+  venueId: string,
+  bookingDate: string,
+  startTime: string,
+  endTime: string
+) {
+  try {
+    const { data: venue, error: venueError } = await supabaseServer
+      .from('venues')
+      .select('number_of_courts')
+      .eq('id', venueId)
+      .eq('status', 'approved')
+      .maybeSingle();
+
+    if (venueError || !venue) {
+      return {
+        available: false,
+        availableCourts: 0,
+        bookedCourts: 0,
+        totalCourts: 1,
+        error: 'Venue not found',
+      };
+    }
+
+    const { bookings, error: bookingsError } = await fetchVenueBookingsForDate(venueId, bookingDate);
+    if (bookingsError) {
+      return {
+        available: false,
+        availableCourts: 0,
+        bookedCourts: 0,
+        totalCourts: venue.number_of_courts ?? 1,
+        error: bookingsError,
+      };
+    }
+
+    const intervals = bookings.map((b) => bookingToInterval(b.start_time, b.end_time));
+    const availability = getCourtAvailability(
+      venue.number_of_courts ?? 1,
+      intervals,
+      startTime,
+      endTime
+    );
+
+    return { ...availability, error: null };
+  } catch (error: any) {
+    console.error('Error checking court availability:', error);
+    return {
+      available: false,
+      availableCourts: 0,
+      bookedCourts: 0,
+      totalCourts: 1,
+      error: error.message || 'Failed to check availability',
+    };
+  }
+}
+
+export type CreatePlayerBookingInput = {
+  venueId: string;
+  bookingDate: string;
+  startTime: string;
+  endTime: string;
+  totalHours: number;
+  totalPrice: number;
+  playerName: string;
+  playerPhone: string;
+  playerEmail: string;
+  notes?: string | null;
+};
+
+/**
+ * Create a player booking with court-capacity validation.
+ */
+export async function createPlayerBooking(input: CreatePlayerBookingInput) {
+  try {
+    const availability = await checkCourtAvailability(
+      input.venueId,
+      input.bookingDate,
+      input.startTime,
+      input.endTime
+    );
+
+    if (availability.error) {
+      return { success: false, error: availability.error, availability };
+    }
+
+    if (!availability.available) {
+      return {
+        success: false,
+        error: 'No courts available for the selected time. Please choose a different time.',
+        availability,
+      };
+    }
+
+    const { error } = await supabaseServer.from('bookings').insert({
+      venue_id: input.venueId,
+      booking_date: input.bookingDate,
+      start_time: input.startTime,
+      end_time: input.endTime,
+      total_hours: input.totalHours,
+      total_price: input.totalPrice,
+      player_name: input.playerName,
+      player_phone: input.playerPhone,
+      player_email: input.playerEmail,
+      notes: input.notes || null,
+      status: 'pending',
+    });
+
+    if (error) {
+      return { success: false, error: error.message, availability };
+    }
+
+    return { success: true, error: null, availability };
+  } catch (error: any) {
+    console.error('Error creating player booking:', error);
+    return { success: false, error: error.message || 'Failed to create booking' };
   }
 }
 
@@ -1247,6 +1605,38 @@ export async function saveOwnerOffer(
 /**
  * Fetch owner profile + venue stats
  */
+export async function fetchPlayerProfileServer(userId: string) {
+  try {
+    const supabase = await getOwnerActionSupabase();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user || user.id !== userId) {
+      return { profile: null, bookingDetails: null, error: 'Not authenticated' };
+    }
+
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('full_name, phone, whatsapp_number')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (error) {
+      return { profile: null, bookingDetails: null, error: error.message };
+    }
+
+    const bookingDetails = resolvePlayerBookingDetails(profile, user);
+
+    return { profile, bookingDetails, error: null };
+  } catch (error: any) {
+    console.error('Error fetching player profile:', error);
+    return {
+      profile: null,
+      bookingDetails: null,
+      error: error.message || 'Failed to fetch profile',
+    };
+  }
+}
+
 export async function fetchOwnerProfileServer(userId: string) {
   try {
     const [profileResult, venuesResult] = await Promise.all([

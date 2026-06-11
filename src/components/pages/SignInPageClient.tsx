@@ -63,7 +63,7 @@ export function SignInPageClient() {
         // Fetch user role
         const { data: profile } = await supabase
           .from('profiles')
-          .select('role')
+          .select('role, full_name, phone, whatsapp_number')
           .eq('id', data.user.id)
           .single();
 
@@ -81,6 +81,10 @@ export function SignInPageClient() {
           localStorage.setItem('user_logged_in', 'true');
           localStorage.setItem('user_id', data.user.id);
           localStorage.setItem('user_email', data.user.email || '');
+          if (profile.full_name) localStorage.setItem('user_full_name', profile.full_name);
+          if (profile.phone || profile.whatsapp_number) {
+            localStorage.setItem('user_phone', profile.phone || profile.whatsapp_number || '');
+          }
         }
 
         toast.success("Welcome back!");

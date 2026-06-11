@@ -9,8 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { MapPin, Clock, Phone, Calendar, Loader2, Star, CheckCircle, Wifi, Car, Droplets, Wind, Zap, Shield, Award, X, Image as ImageIcon, ArrowRight, Globe, Facebook, Instagram, Twitter, Play, TrendingUp, Users, Menu } from "lucide-react";
-import { useState, useEffect } from "react";
+import { MapPin, Clock, Phone, Loader2, Star, CheckCircle, Wifi, Car, Droplets, Wind, Zap, Shield, Award, X, Image as ImageIcon, ArrowRight, Globe, Facebook, Instagram, Twitter, Play, TrendingUp, Users, Menu } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Tables } from "@/integrations/supabase/types";
@@ -19,7 +19,26 @@ import { Turnstile } from "@marsidev/react-turnstile";
 import { formatFullLocation, getCityById } from "@/lib/locationHelpers";
 import ppLogo from "@/assets/pp logo.png";
 import { AdBanner, AdRectangle, AdNative } from "@/components/AdSlot";
-import { fetchVenueLoyaltyTiers, fetchUserLoyaltyStatus, LoyaltyTier } from "@/lib/server-actions";
+import {
+  createPlayerBooking,
+  fetchPlayerProfileServer,
+  fetchVenueBookingsForDate,
+  fetchVenueLoyaltyTiers,
+  fetchUserLoyaltyStatus,
+  LoyaltyTier,
+  type VenueDayBooking,
+} from "@/lib/server-actions";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  buildBookingWhatsAppMessage,
+  getBookingWhatsAppTarget,
+} from "@/lib/booking-whatsapp";
+import {
+  getCachedPlayerBookingDetails,
+  resolvePlayerBookingDetails,
+} from "@/lib/player-profile";
+import { BookingTimeSlotGrid } from "@/components/BookingTimeSlotGrid";
+import { bookingToInterval, getCourtAvailability } from "@/lib/court-availability";
 
 type Venue = Tables<'venues'>;
 type VenuePhoto = Tables<'venue_photos'>;
@@ -42,6 +61,12 @@ interface VenueDetailClientProps {
   initialLoyaltyTiers?: any[] | null;
   initialLoyaltyStatus?: any | null;
   initialUserEmail?: string | null;
+  initialPlayerProfile?: {
+    fullName: string | null;
+    phone: string | null;
+    email: string | null;
+  } | null;
+  initialIsOwner?: boolean;
 }
 
 export function VenueDetailClient({ 
@@ -51,9 +76,12 @@ export function VenueDetailClient({
   initialActiveOffer,
   initialLoyaltyTiers = null,
   initialLoyaltyStatus = null,
-  initialUserEmail = null
+  initialUserEmail = null,
+  initialPlayerProfile = null,
+  initialIsOwner = false,
 }: VenueDetailClientProps) {
   const router = useRouter();
+  const { user: authUser, authReady, isLoggedIn } = useAuth();
   const [venue, setVenue] = useState<VenueWithReviews | null>(initialVenue || null);
   const [loading, setLoading] = useState(!initialVenue); // Only loading if no initial data
   const [submitting, setSubmitting] = useState(false);
@@ -64,10 +92,22 @@ export function VenueDetailClient({
   const [bookingDate, setBookingDate] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
-  const [playerName, setPlayerName] = useState("");
-  const [playerPhone, setPlayerPhone] = useState("");
-  const [playerEmail, setPlayerEmail] = useState("");
-  const [notes, setNotes] = useState("");
+  const [playerName, setPlayerName] = useState(
+    initialIsOwner ? "" : initialPlayerProfile?.fullName || getCachedPlayerBookingDetails().fullName || ""
+  );
+  const [playerPhone, setPlayerPhone] = useState(
+    initialIsOwner ? "" : initialPlayerProfile?.phone || getCachedPlayerBookingDetails().phone || ""
+  );
+  const [playerEmail, setPlayerEmail] = useState(
+    initialIsOwner
+      ? ""
+      : initialPlayerProfile?.email ||
+          initialUserEmail ||
+          getCachedPlayerBookingDetails().email ||
+          ""
+  );
+  const [dayBookings, setDayBookings] = useState<VenueDayBooking[]>([]);
+  const [loadingDayBookings, setLoadingDayBookings] = useState(false);
 
   // Review form state
   const [reviewName, setReviewName] = useState("");
@@ -81,7 +121,7 @@ export function VenueDetailClient({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [ownerEmail, setOwnerEmail] = useState<string | null>(null);
   const [turnstileKey, setTurnstileKey] = useState(0);
-  const [isOwner, setIsOwner] = useState(false);
+  const [isOwner, setIsOwner] = useState(initialIsOwner);
   // Initialize currentUser with SSR data if available
   const [currentUser, setCurrentUser] = useState<any>(
     initialUserEmail ? { email: initialUserEmail } : null
@@ -171,103 +211,65 @@ export function VenueDetailClient({
     };
   }, [venue]);
 
-  // Check if current user is logged in, fetch profile, and check ownership
+  // Sync logged-in state from AuthContext (avoids hanging client Supabase auth calls)
   useEffect(() => {
-    // Skip if we already have auth data from SSR
-    if (authChecked && initialUserEmail) {
+    if (!authReady) return;
+
+    if (isLoggedIn && authUser) {
+      setCurrentUser((prev: any) => prev ?? authUser);
+      const venueOwner = !!venue && venue.owner_id === authUser.id;
+      setIsOwner(venueOwner);
+
+      if (!venueOwner) {
+        const cached = getCachedPlayerBookingDetails();
+        const details = resolvePlayerBookingDetails(userProfile, authUser);
+        setPlayerEmail((prev) => prev || details.email || cached.email || initialUserEmail || "");
+        setPlayerName((prev) => prev || details.fullName || cached.fullName || "");
+        setPlayerPhone((prev) => prev || details.phone || cached.phone || "");
+      }
+
+      setAuthChecked(true);
       return;
     }
 
-    const checkUserAndOwnership = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        
-        // Only update if different from SSR data
-        if (!initialUserEmail || user?.email !== initialUserEmail) {
-          setCurrentUser(user);
-        }
-        
-        if (!user) {
-          setIsOwner(false);
-          setUserProfile(null);
-          setAuthChecked(true);
-          return;
-        }
+    if (!initialUserEmail) {
+      setCurrentUser(null);
+      setIsOwner(false);
+    }
 
-        // Fetch user profile for pre-filling form
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('full_name, phone, role')
-          .eq('id', user.id)
-          .single();
+    setAuthChecked(true);
+  }, [authReady, isLoggedIn, authUser, userProfile, venue, initialUserEmail]);
 
-        setUserProfile(profile);
-
-        // Pre-fill form fields with user data
-        if (user.email) setPlayerEmail(user.email);
-        if (profile?.full_name) setPlayerName(profile.full_name);
-        if (profile?.phone) setPlayerPhone(profile.phone);
-
-        // Check ownership
-        if (venue && venue.owner_id === user.id) {
-          setIsOwner(true);
-        } else {
-          setIsOwner(false);
-        }
-        
-        setAuthChecked(true);
-      } catch (error) {
-        console.error('Error checking user:', error);
-        setIsOwner(false);
-        setAuthChecked(true);
-      }
-    };
-
-    checkUserAndOwnership();
-  }, [venue, authChecked, initialUserEmail]);
-
-  // Always fetch user profile and auto-fill form when user is logged in
+  // Fetch profile via server action when name/phone still missing
   useEffect(() => {
-    const fetchUserProfileForForm = async () => {
-      // Only run if we have a user (from currentUser or initialUserEmail)
-      const hasUser = currentUser || initialUserEmail;
-      if (!hasUser) return;
-      
-      try {
-        // Get user from auth
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+    if (!authReady || !authUser?.id || isOwner) return;
 
-        // Fetch user profile
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('full_name, phone, role')
-          .eq('id', user.id)
-          .single();
+    const needsName = !playerName;
+    const needsPhone = !playerPhone;
+    if (!needsName && !needsPhone) return;
 
-        if (profile) {
-          setUserProfile(profile);
-          
-          // Auto-fill form fields only if they're empty (don't overwrite user input)
-          setPlayerName(prev => prev || profile.full_name || '');
-          setPlayerPhone(prev => prev || profile.phone || '');
-          setPlayerEmail(prev => prev || user.email || '');
-        } else if (user.email) {
-          // If no profile but we have email, at least fill email
-          setPlayerEmail(prev => prev || user.email || '');
-        }
-      } catch (error) {
-        console.error('Error fetching user profile for form:', error);
-      }
+    let cancelled = false;
+
+    (async () => {
+      const { profile, bookingDetails } = await fetchPlayerProfileServer(authUser.id);
+      if (cancelled) return;
+
+      if (profile) setUserProfile(profile);
+
+      const cached = getCachedPlayerBookingDetails();
+      const details = bookingDetails ?? resolvePlayerBookingDetails(profile, authUser);
+      const fullName = details.fullName || cached.fullName || "";
+      const phone = details.phone || cached.phone || "";
+      const email = details.email || cached.email || "";
+      setPlayerName((prev) => prev || fullName);
+      setPlayerPhone((prev) => prev || phone);
+      setPlayerEmail((prev) => prev || email);
+    })();
+
+    return () => {
+      cancelled = true;
     };
-
-    // Small delay to ensure auth is ready
-    const timer = setTimeout(() => {
-      fetchUserProfileForForm();
-    }, 100);
-
-    return () => clearTimeout(timer);
-  }, [currentUser, initialUserEmail]);
+  }, [authReady, authUser, isOwner, playerName, playerPhone]);
 
   // Fetch loyalty tiers and user loyalty status (only if not provided by SSR)
   useEffect(() => {
@@ -466,6 +468,37 @@ export function VenueDetailClient({
     return hours;
   };
 
+  const totalCourts = venue?.number_of_courts ?? 1;
+
+  const courtAvailability = useMemo(() => {
+    if (!startTime || !endTime || calculateTotalHours() <= 0) return null;
+
+    const intervals = dayBookings.map((b) => bookingToInterval(b.start_time, b.end_time));
+    return getCourtAvailability(totalCourts, intervals, startTime, endTime);
+  }, [dayBookings, startTime, endTime, totalCourts]);
+
+  useEffect(() => {
+    if (!bookingDate || !venue?.id) {
+      setDayBookings([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      setLoadingDayBookings(true);
+      const result = await fetchVenueBookingsForDate(venue.id, bookingDate);
+      if (!cancelled) {
+        setDayBookings(result.bookings);
+        setLoadingDayBookings(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bookingDate, venue?.id]);
+
   const calculateTotalPrice = () => {
     if (!bookingDate || !startTime || !endTime || !venue) return 0;
     
@@ -515,51 +548,63 @@ export function VenueDetailClient({
       return;
     }
 
-    // Check if booking is at least 1 hour in advance
-    if (bookingDateTime < oneHourFromNow) {
+    // Players must book at least 1 hour in advance; owners can book walk-ins
+    if (!isOwner && bookingDateTime < oneHourFromNow) {
       toast.error("Please book at least 1 hour in advance");
+      return;
+    }
+
+    if (courtAvailability && !courtAvailability.available) {
+      toast.error("No courts available for this time slot. Please choose a different time.");
       return;
     }
 
     setSubmitting(true);
 
     try {
-      const { error } = await supabase
-        .from('bookings')
-        .insert({
-          venue_id: venue.id,
-          booking_date: bookingDate,
-          start_time: startTime,
-          end_time: endTime,
-          total_hours: calculateTotalHours(),
-          player_name: playerName,
-          player_phone: playerPhone,
-          player_email: playerEmail,
-          notes: notes || null,
-          status: 'pending',
-          total_price: calculateTotalPrice()
-        });
+      const result = await createPlayerBooking({
+        venueId: venue.id,
+        bookingDate,
+        startTime,
+        endTime,
+        totalHours: calculateTotalHours(),
+        totalPrice: calculateTotalPrice(),
+        playerName,
+        playerPhone,
+        playerEmail,
+        notes: null,
+      });
 
-      if (error) throw error;
+      if (!result.success) {
+        throw new Error(result.error || "Failed to create booking");
+      }
 
-      const message = `🎾 *PakPlay Booking Request* 🎾\n\n` +
-        `📍 *Venue:* ${venue.name}\n` +
-        `📅 *Date:* ${bookingDate}\n` +
-        `⏰ *Time:* ${formatTime(startTime)} - ${formatTime(endTime)}\n` +
-        `⏱️ *Duration:* ${calculateTotalHours()} hour(s)\n\n` +
-        `👤 *Customer Details:*\n` +
-        `Name: ${playerName}\n` +
-        `Phone: ${playerPhone}\n` +
-        `Email: ${playerEmail}\n\n` +
-        `💰 *Total Amount:* PKR ${calculateTotalPrice()}` +
-        `${notes ? `\n\n📝 *Additional Notes:*\n${notes}` : ''}` +
-        `\n\n━━━━━━━━━━━━━━━\n` +
-        `✨ Booked via *PakPlay*\n` +
-        `🌐 www.pakplay.co`;
+      const totalPrice = calculateTotalPrice();
+      const message = buildBookingWhatsAppMessage({
+        isOwnerBooking: isOwner,
+        venueName: venue.name,
+        bookingDate,
+        startTimeLabel: formatTime(startTime),
+        endTimeLabel: formatTime(endTime),
+        totalHours: calculateTotalHours(),
+        playerName,
+        playerPhone,
+        playerEmail,
+        totalPrice,
+      });
+
+      const whatsappTarget = getBookingWhatsAppTarget(
+        isOwner,
+        playerPhone,
+        venue.whatsapp_number
+      );
+      const whatsappUrl = `https://wa.me/${formatWhatsAppNumber(whatsappTarget)}?text=${encodeURIComponent(message)}`;
       
-      const whatsappUrl = `https://wa.me/${formatWhatsAppNumber(venue.whatsapp_number)}?text=${encodeURIComponent(message)}`;
-      
-      toast.success("Booking request sent! Check your WhatsApp");
+      toast.success(
+        isOwner
+          ? "Booking saved! Opening WhatsApp to message the customer"
+          : "Booking request sent! Check your WhatsApp"
+      );
       
       // Clear form fields first
       setBookingDate("");
@@ -568,8 +613,8 @@ export function VenueDetailClient({
       setPlayerName("");
       setPlayerPhone("");
       setPlayerEmail("");
-      setNotes("");
-      
+      setDayBookings([]);
+
       // Open WhatsApp in new tab
       try {
         window.open(whatsappUrl, '_blank');
@@ -877,7 +922,7 @@ export function VenueDetailClient({
               </p>
             )}
              {/* Pricing Section */}
-             <div className="mb-2">
+             <div className="mb-2 flex flex-wrap items-end gap-3">
                {activeOffer ? (
                  <SpecialOfferBadge offer={activeOffer} originalPrice={venue.price_per_hour} />
                ) : (
@@ -886,6 +931,12 @@ export function VenueDetailClient({
                    <div className="text-3xl font-bold">
                      PKR {venue.price_per_hour.toLocaleString()}<span className="text-lg font-normal">/hour</span>
                    </div>
+                 </div>
+               )}
+               {totalCourts > 0 && (
+                 <div className="bg-white/20 backdrop-blur-sm rounded-lg px-4 py-3 inline-block">
+                   <p className="text-white/80 text-sm mb-0.5">Courts</p>
+                   <p className="text-lg font-semibold">{totalCourts} {totalCourts === 1 ? 'court' : 'courts'}</p>
                  </div>
                )}
              </div>
@@ -1340,12 +1391,19 @@ export function VenueDetailClient({
             )}
           </div>
 
-          {/* Booking Sidebar — hidden for venue owners */}
-          {authChecked && !isOwner && (
+          {/* Booking Sidebar */}
+          {authChecked && (
           <div className="lg:col-span-1">
             <div className="lg:sticky lg:top-24 h-[calc(100vh-7rem)]">
               <Card id="booking" className="flex flex-col h-full p-2 scroll-mt-24 bg-blue-600 border-blue-600">
-                <h3 className="text-lg font-bold mb-2 text-white shrink-0">Book Your Slot</h3>
+                <h3 className="text-lg font-bold mb-1 text-white shrink-0">
+                  {isOwner ? "Book for Customer" : "Book Your Slot"}
+                </h3>
+                {isOwner && (
+                  <p className="text-white/80 text-xs mb-2 shrink-0">
+                    Enter customer details. WhatsApp opens to the customer&apos;s number after booking.
+                  </p>
+                )}
                 
                 {/* Show sign-in prompt if user is NOT logged in */}
                 {!currentUser ? (
@@ -1388,82 +1446,45 @@ export function VenueDetailClient({
                               toast.error("Please select a future date");
                               return;
                             }
+                            setStartTime("");
+                            setEndTime("");
                             setBookingDate(e.target.value);
                           }}
                           min={new Date().toISOString().split('T')[0]}
-                          className="text-sm w-full h-10 bg-white/10 border-white/30 text-white placeholder:text-white/50 focus:bg-white/20"
+                          className="booking-date-input text-sm w-full h-10 pr-10 bg-white/10 border-white/30 text-white placeholder:text-white/50 focus:bg-white/20"
                         />
                       </div>
-                      
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <Label className="text-white text-sm font-semibold mb-1 block">Start Time</Label>
-                          <Input
-                            type="time"
-                            value={startTime}
-                            onChange={(e) => {
-                              const newStartTime = e.target.value;
-                              setStartTime(newStartTime);
-                              
-                              if (endTime && newStartTime) {
-                                const start = new Date(`2000-01-01T${newStartTime}`);
-                                let end = new Date(`2000-01-01T${endTime}`);
-                                
-                                if (end <= start) {
-                                  end = new Date(`2000-01-02T${endTime}`);
-                                }
-                                
-                                const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-                                
-                                if (hours > 8) {
-                                  toast.error("Booking duration cannot exceed 8 hours");
-                                }
-                              }
-                            }}
-                            className="text-sm w-full h-10 bg-white/10 border-white/30 text-white placeholder:text-white/50 focus:bg-white/20"
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-white text-sm font-semibold mb-1 block">End Time</Label>
-                          <Input
-                            type="time"
-                            value={endTime}
-                            onChange={(e) => {
-                              const newEndTime = e.target.value;
-                              setEndTime(newEndTime);
-                              
-                              if (startTime && newEndTime) {
-                                const start = new Date(`2000-01-01T${startTime}`);
-                                let end = new Date(`2000-01-01T${newEndTime}`);
-                                
-                                if (end <= start) {
-                                  end = new Date(`2000-01-02T${newEndTime}`);
-                                }
-                                
-                                const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-                                
-                                if (hours > 8) {
-                                  toast.error("Booking duration cannot exceed 8 hours");
-                                }
-                              }
-                            }}
-                            className="text-sm w-full h-10 bg-white/10 border-white/30 text-white placeholder:text-white/50 focus:bg-white/20"
-                          />
-                        </div>
-                      </div>
-                      
+
+                      <BookingTimeSlotGrid
+                        bookingDate={bookingDate}
+                        dayBookings={dayBookings}
+                        totalCourts={totalCourts}
+                        startTime={startTime}
+                        endTime={endTime}
+                        onChange={(start, end) => {
+                          setStartTime(start);
+                          setEndTime(end);
+                        }}
+                        loading={loadingDayBookings}
+                        isOwner={isOwner}
+                      />
+
                       <div className="space-y-2">
-                        <Label className="text-white text-sm font-semibold mb-1 block">Full Name</Label>
+                        <Label className="text-white text-sm font-semibold mb-1 block">
+                          {isOwner ? "Customer Name" : "Full Name"}
+                        </Label>
                         <Input
                           value={playerName}
                           onChange={(e) => setPlayerName(e.target.value)}
-                          placeholder="Enter your full name"
+                          placeholder={isOwner ? "Customer's full name" : "Enter your full name"}
                           className="text-sm w-full h-10 bg-white/10 border-white/30 text-white placeholder:text-white/50 focus:bg-white/20"
                         />
                       </div>
                       
                       <div className="space-y-2">
-                        <Label className="text-white text-sm font-semibold mb-1 block">Phone Number</Label>
+                        <Label className="text-white text-sm font-semibold mb-1 block">
+                          {isOwner ? "Customer Phone" : "Phone Number"}
+                        </Label>
                         <Input
                           value={playerPhone}
                           onChange={(e) => setPlayerPhone(e.target.value)}
@@ -1473,29 +1494,21 @@ export function VenueDetailClient({
                       </div>
                       
                       <div className="space-y-2">
-                        <Label className="text-white text-sm font-semibold mb-1 block">Email Address</Label>
+                        <Label className="text-white text-sm font-semibold mb-1 block">
+                          {isOwner ? "Customer Email" : "Email Address"}
+                        </Label>
                         <Input
                           type="email"
                           value={playerEmail}
                           onChange={(e) => setPlayerEmail(e.target.value)}
-                          placeholder="your@email.com"
+                          placeholder={isOwner ? "customer@email.com" : "your@email.com"}
                           className="text-sm w-full h-10 bg-white/10 border-white/30 text-white placeholder:text-white/50 focus:bg-white/20"
-                          disabled={!!currentUser}
-                        />
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label className="text-white text-sm font-semibold mb-1 block">Additional Notes (Optional)</Label>
-                        <Textarea
-                          value={notes}
-                          onChange={(e) => setNotes(e.target.value)}
-                          placeholder="Any special requests or notes..."
-                          className="text-sm w-full resize-none h-24 bg-white/10 border-white/30 text-white placeholder:text-white/50 focus:bg-white/20"
+                          disabled={!!currentUser && !isOwner}
                         />
                       </div>
 
-                      {/* Discount Selection */}
-                      {(activeOffer || (loyaltyStatus && loyaltyStatus.currentTier)) && (
+                      {/* Discount Selection — players only */}
+                      {!isOwner && (activeOffer || (loyaltyStatus && loyaltyStatus.currentTier)) && (
                         <div className="space-y-2">
                           <Label className="text-white text-sm font-semibold mb-2 block">Apply Discount</Label>
                           <div className="space-y-2">
@@ -1590,13 +1603,29 @@ export function VenueDetailClient({
                       
                       <Button 
                         onClick={handleBooking}
-                        disabled={submitting || !bookingDate || !startTime || !endTime || !playerName || !playerPhone || !playerEmail}
+                        disabled={
+                          submitting ||
+                          loadingDayBookings ||
+                          !bookingDate ||
+                          !startTime ||
+                          !endTime ||
+                          !playerName ||
+                          !playerPhone ||
+                          !playerEmail ||
+                          calculateTotalHours() <= 0 ||
+                          (courtAvailability !== null && !courtAvailability.available)
+                        }
                         className="w-full bg-white text-blue-600 hover:bg-white/90 font-bold h-11 text-sm shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {submitting ? (
                           <>
                             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                             Processing...
+                          </>
+                        ) : isOwner ? (
+                          <>
+                            Save &amp; Message Customer
+                            <ArrowRight className="w-4 h-4 ml-2" />
                           </>
                         ) : (
                           <>
@@ -1607,7 +1636,9 @@ export function VenueDetailClient({
                       </Button>
                       
                       <p className="text-xs text-white/80 text-center mt-2 leading-tight">
-                        You'll be redirected to WhatsApp to confirm your booking
+                        {isOwner
+                          ? "WhatsApp will open to the customer's number with booking details"
+                          : "You'll be redirected to WhatsApp to confirm your booking"}
                       </p>
                     </div>
                   </div>

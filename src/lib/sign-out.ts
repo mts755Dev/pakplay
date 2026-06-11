@@ -6,6 +6,8 @@ export function clearAuthSession() {
   localStorage.removeItem('user_logged_in');
   localStorage.removeItem('user_id');
   localStorage.removeItem('user_email');
+  localStorage.removeItem('user_full_name');
+  localStorage.removeItem('user_phone');
 
   document.cookie.split(';').forEach((cookie) => {
     const name = cookie.split('=')[0].trim();

@@ -130,8 +130,13 @@ export function SignUpPageClient() {
           console.error('Profile upsert error:', profileError);
         }
 
-        // Cache role in localStorage
+        // Cache auth details in localStorage
         localStorage.setItem('user_role', role);
+        localStorage.setItem('user_logged_in', 'true');
+        localStorage.setItem('user_id', data.user.id);
+        localStorage.setItem('user_email', formData.email);
+        localStorage.setItem('user_full_name', formData.fullName);
+        localStorage.setItem('user_phone', formData.phone);
 
         const roleMessage = role === 'venue_owner' 
           ? 'You can now list your venues!' 

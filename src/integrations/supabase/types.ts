@@ -166,6 +166,7 @@ export type Database = {
           description: string | null
           amenities: string[] | null
           price_per_hour: number
+          number_of_courts: number
           opening_time: string | null
           closing_time: string | null
           is_24_7: boolean
@@ -198,6 +199,7 @@ export type Database = {
           description?: string | null
           amenities?: string[] | null
           price_per_hour: number
+          number_of_courts?: number
           opening_time?: string | null
           closing_time?: string | null
           is_24_7?: boolean
@@ -230,6 +232,7 @@ export type Database = {
           description?: string | null
           amenities?: string[] | null
           price_per_hour?: number
+          number_of_courts?: number
           opening_time?: string | null
           closing_time?: string | null
           is_24_7?: boolean

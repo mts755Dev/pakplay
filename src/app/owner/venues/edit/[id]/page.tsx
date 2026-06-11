@@ -42,6 +42,7 @@ export default async function OwnerVenueEditPage({ params }: PageProps) {
     <OwnerVenueEditClient
       venueId={params.id}
       initialVenue={venueData}
+      userId={userWithRole.user.id}
     />
   );
 }

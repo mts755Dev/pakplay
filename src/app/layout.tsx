@@ -4,7 +4,6 @@ import "./globals.css";
 import { Providers } from "@/components/providers";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
-import { ScrollToTop } from "@/components/ScrollToTop";
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -108,7 +107,6 @@ export default function RootLayout({
         />
         
         <Providers>
-          <ScrollToTop />
           {children}
           <Toaster />
           <Sonner />

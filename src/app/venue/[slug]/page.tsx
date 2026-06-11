@@ -1,5 +1,10 @@
 import { VenueDetailClient } from "@/components/pages/VenueDetailClient";
-import { fetchVenueBySlug, fetchVenueLoyaltyTiers, fetchUserLoyaltyStatus } from "@/lib/server-actions";
+import {
+  fetchVenueBySlug,
+  fetchVenueLoyaltyTiers,
+  fetchUserLoyaltyStatus,
+} from "@/lib/server-actions";
+import { resolvePlayerBookingDetails } from "@/lib/player-profile";
 import { notFound } from "next/navigation";
 import { Metadata } from "next";
 import { cookies } from "next/headers";
@@ -61,6 +66,12 @@ export default async function VenueDetailPage({ params }: PageProps) {
   let loyaltyTiers = null;
   let loyaltyStatus = null;
   let currentUserEmail = null;
+  let initialPlayerProfile: {
+    fullName: string | null;
+    phone: string | null;
+    email: string | null;
+  } | null = null;
+  let initialIsOwner = false;
 
   try {
     // Get current user from server-side auth
@@ -95,12 +106,16 @@ export default async function VenueDetailPage({ params }: PageProps) {
     // BUT skip if user is the venue owner (owners don't need loyalty status)
     if (user?.email) {
       currentUserEmail = user.email;
-      
-      // Check if user is the owner of this venue
-      const isOwner = venueData.owner_id === user.id;
-      
-      // Only fetch loyalty status for non-owners (players/customers)
-      if (!isOwner) {
+      initialIsOwner = venueData.owner_id === user.id;
+
+      if (!initialIsOwner) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, phone, whatsapp_number')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        initialPlayerProfile = resolvePlayerBookingDetails(profile, user);
         loyaltyStatus = await fetchUserLoyaltyStatus(venueData.id, user.email);
       }
     }
@@ -123,6 +138,8 @@ export default async function VenueDetailPage({ params }: PageProps) {
       initialLoyaltyTiers={serializedLoyaltyTiers}
       initialLoyaltyStatus={serializedLoyaltyStatus}
       initialUserEmail={currentUserEmail}
+      initialPlayerProfile={initialPlayerProfile}
+      initialIsOwner={initialIsOwner}
     />
   );
 }

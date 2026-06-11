@@ -11,21 +11,23 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Building, MapPin, DollarSign, Phone, Clock, Image, Upload, X, Loader2, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { LocationSelector } from "@/components/LocationSelector";
-import { fetchVenueLoyaltyTiers, saveVenueLoyaltyTiers, LoyaltyTier } from "@/lib/server-actions";
-import { useAuth } from "@/contexts/AuthContext";
+import { uploadVenueLogo, uploadVenuePhotos } from "@/lib/file-utils";
+import {
+  fetchVenueLoyaltyTiers,
+  updateOwnerVenue,
+} from "@/lib/server-actions";
 
 interface OwnerVenueEditClientProps {
   venueId: string;
   initialVenue: any;
+  userId: string;
 }
 
-export function OwnerVenueEditClient({ venueId, initialVenue }: OwnerVenueEditClientProps) {
+export function OwnerVenueEditClient({ venueId, initialVenue, userId }: OwnerVenueEditClientProps) {
   console.log("Rendering OwnerVenueEditClient - Loyalty Tiers:", initialVenue?.venue_loyalty_tiers);
   const router = useRouter();
-  const { user: authUser } = useAuth();
   const id = venueId;
   // Use initial venue data from server - no loading needed!
   const [venue] = useState<any>(initialVenue);
@@ -50,6 +52,7 @@ export function OwnerVenueEditClient({ venueId, initialVenue }: OwnerVenueEditCl
     subArea: "",
     address: "",
     pricePerHour: "",
+    numberOfCourts: "1",
     phone: "",
     openingTime: "",
     closingTime: "",
@@ -106,6 +109,7 @@ export function OwnerVenueEditClient({ venueId, initialVenue }: OwnerVenueEditCl
           subArea: initialVenue.sub_area || "",
           address: initialVenue.address || "",
           pricePerHour: initialVenue.price_per_hour?.toString() || "",
+          numberOfCourts: initialVenue.number_of_courts?.toString() || "1",
           phone: initialVenue.whatsapp_number || "",
           openingTime: initialVenue.opening_time || "",
           closingTime: initialVenue.closing_time || "",
@@ -261,63 +265,17 @@ export function OwnerVenueEditClient({ venueId, initialVenue }: OwnerVenueEditCl
     setLogoPreview("");
   };
 
-  const uploadLogo = async (userId: string) => {
-    if (!logo && !logoPreview) return null;
-    if (!logo) return logoPreview; // Return existing logo URL if no new logo
-
-    const fileExt = logo.name.split('.').pop();
-    const fileName = `${userId}/${id}/logo.${fileExt}`;
-
-    const { error } = await supabase.storage
-      .from('venue-logos')
-      .upload(fileName, logo, { upsert: true });
-
-    if (error) {
-      return logoPreview; // Return existing logo URL on error
-    }
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('venue-logos')
-      .getPublicUrl(fileName);
-
-    return publicUrl;
-  };
-
-  const uploadNewPhotos = async (venueId: string, userId: string) => {
-    const uploadedUrls: string[] = [];
-
-    // Upload files
-    for (let i = 0; i < newPhotos.length; i++) {
-      const photo = newPhotos[i];
-      const fileExt = photo.name.split('.').pop();
-      const fileName = `${userId}/${venueId}/${Date.now()}_${i}.${fileExt}`;
-
-      const { error } = await supabase.storage
-        .from('venue-photos')
-        .upload(fileName, photo);
-
-      if (error) {
-        continue;
-      }
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('venue-photos')
-        .getPublicUrl(fileName);
-
-      uploadedUrls.push(publicUrl);
-    }
-
-    // Add URL-based photos
-    uploadedUrls.push(...newPhotoUrls);
-
-    return uploadedUrls;
-  };
-
   const handleSave = async () => {
     if (!venue) return;
 
     if (!formData.venueName || !formData.sport || !formData.city || !formData.address) {
       toast.error("Please fill in all required fields");
+      return;
+    }
+
+    const numberOfCourts = parseInt(formData.numberOfCourts, 10);
+    if (!Number.isFinite(numberOfCourts) || numberOfCourts < 1) {
+      toast.error("Please enter at least 1 court");
       return;
     }
 
@@ -333,18 +291,34 @@ export function OwnerVenueEditClient({ venueId, initialVenue }: OwnerVenueEditCl
     setUploading(newPhotos.length > 0 || newPhotoUrls.length > 0);
 
     try {
-      if (!authUser) {
-        toast.error("Please sign in first");
-        return;
+      let logoUrl: string | null = logoPreview || null;
+      if (logo) {
+        const logoResult = await uploadVenueLogo(userId, id, logo);
+        if (logoResult.url) {
+          logoUrl = logoResult.url;
+        } else if (logoResult.error) {
+          console.error('Logo upload error:', logoResult.error);
+        }
       }
 
-      // Upload logo if changed
-      const logoUrl = await uploadLogo(authUser.id);
+      let uploadedPhotoUrls: string[] = [...newPhotoUrls];
+      if (newPhotos.length > 0) {
+        const photoResult = await uploadVenuePhotos(userId, id, newPhotos);
+        if (photoResult.error) {
+          toast.error(photoResult.error);
+          return;
+        }
+        uploadedPhotoUrls = [...uploadedPhotoUrls, ...photoResult.urls];
+      }
 
-      // Update venue
-      const { error: venueError } = await supabase
-        .from('venues')
-        .update({
+      const validTiers = loyaltyTiers.filter(
+        (t) => t.tier_name.trim() && parseInt(t.min_bookings) > 0 && parseFloat(t.discount_percent) > 0
+      );
+
+      const result = await updateOwnerVenue(
+        userId,
+        id,
+        {
           name: formData.venueName,
           sport_type: formData.sport as 'cricket' | 'football' | 'futsal' | 'pickleball' | 'badminton' | 'padel',
           province: formData.province || null,
@@ -355,87 +329,33 @@ export function OwnerVenueEditClient({ venueId, initialVenue }: OwnerVenueEditCl
           description: formData.description,
           amenities: formData.amenities.length > 0 ? formData.amenities : null,
           price_per_hour: parseFloat(formData.pricePerHour),
+          number_of_courts: numberOfCourts,
           opening_time: formData.is24_7 ? null : formData.openingTime,
           closing_time: formData.is24_7 ? null : formData.closingTime,
           is_24_7: formData.is24_7,
           whatsapp_number: formData.phone,
-          // Customization fields
           logo_url: logoUrl,
           tagline: formData.tagline || null,
           facebook_url: formData.facebookUrl || null,
           instagram_url: formData.instagramUrl || null,
           google_maps_url: formData.googleMapsUrl || null,
-        })
-        .eq('id', id);
-
-      if (venueError) throw venueError;
-
-      // Delete marked photos
-      if (photosToDelete.length > 0) {
-        await supabase.from('venue_photos').delete().in('id', photosToDelete);
-      }
-
-      // Upload new photos
-      if (newPhotos.length > 0 || newPhotoUrls.length > 0) {
-        const photoUrls = await uploadNewPhotos(id, authUser.id);
-        if (photoUrls.length > 0) {
-          const photoInserts = photoUrls.map((url, index) => ({
-            venue_id: id,
-            photo_url: url,
-            is_primary: remainingPhotos === 0 && index === 0,
-            display_order: remainingPhotos + index,
-          }));
-          await supabase.from('venue_photos').insert(photoInserts);
+        },
+        {
+          photosToDelete,
+          newPhotoUrls: uploadedPhotoUrls,
+          remainingPhotoCount: remainingPhotos,
+          pricingRules,
+          loyaltyTiers: validTiers.map((t) => ({
+            tier_name: t.tier_name.trim(),
+            min_bookings: parseInt(t.min_bookings),
+            discount_percent: parseFloat(t.discount_percent),
+          })),
         }
-      }
-
-      // Update pricing rules
-      await supabase.from('venue_pricing_rules').delete().eq('venue_id', id);
-      if (pricingRules.length > 0) {
-        const pricingInserts: any[] = [];
-        pricingRules.forEach((rule, index) => {
-          if (rule.daysOfWeek.length === 0) {
-            pricingInserts.push({
-              venue_id: id,
-              day_of_week: null,
-              start_time: rule.startTime || null,
-              end_time: rule.endTime || null,
-              price_per_hour: parseFloat(rule.price),
-              priority: index,
-            });
-          } else {
-            rule.daysOfWeek.forEach(day => {
-              pricingInserts.push({
-                venue_id: id,
-                day_of_week: parseInt(day),
-                start_time: rule.startTime || null,
-                end_time: rule.endTime || null,
-                price_per_hour: parseFloat(rule.price),
-                priority: index,
-              });
-            });
-          }
-        });
-        if (pricingInserts.length > 0) {
-          await supabase.from('venue_pricing_rules').insert(pricingInserts);
-        }
-      }
-
-      // Save loyalty tiers
-      const validTiers = loyaltyTiers.filter(
-        t => t.tier_name.trim() && parseInt(t.min_bookings) > 0 && parseFloat(t.discount_percent) > 0
       );
-      const { error: loyaltyError } = await saveVenueLoyaltyTiers(
-        id,
-        validTiers.map(t => ({
-          tier_name: t.tier_name.trim(),
-          min_bookings: parseInt(t.min_bookings),
-          discount_percent: parseFloat(t.discount_percent),
-        }))
-      );
-      if (loyaltyError) {
-        console.error('Error saving loyalty tiers:', loyaltyError);
-        toast.error('Failed to save loyalty tiers');
+
+      if (!result.success) {
+        toast.error(result.error || "Failed to update venue");
+        return;
       }
 
       toast.success("Venue updated successfully!");
@@ -611,13 +531,30 @@ export function OwnerVenueEditClient({ venueId, initialVenue }: OwnerVenueEditCl
                     />
                   </div>
                   <div>
-                    <Label htmlFor="phone">WhatsApp Number *</Label>
-                    <Input 
-                      id="phone" 
-                      value={formData.phone}
-                      onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                    <Label htmlFor="numberOfCourts">Number of Courts *</Label>
+                    <Input
+                      id="numberOfCourts"
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={formData.numberOfCourts}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value, 10);
+                        if (e.target.value === "" || value >= 1) {
+                          setFormData({ ...formData, numberOfCourts: e.target.value });
+                        }
+                      }}
                     />
                   </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="phone">WhatsApp Number *</Label>
+                  <Input 
+                    id="phone" 
+                    value={formData.phone}
+                    onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                  />
                 </div>
 
                 <div className="space-y-2">
