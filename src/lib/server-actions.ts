@@ -3,6 +3,7 @@
 "use server";
 
 import { getServerUser } from './auth-server';
+import { isBookingEffectivelyCompleted, isBookingEndTimePassed } from './booking-status';
 import { supabaseServer } from './supabase-server';
 import { getOwnerActionSupabase } from './supabase-owner';
 import { bookingToInterval, getCourtAvailability } from './court-availability';
@@ -754,7 +755,7 @@ async function verifyOwnerBookingAccess(bookingId: string, userId: string) {
   const supabase = await getOwnerActionSupabase();
   const { data: booking, error } = await supabase
     .from('bookings')
-    .select('id, venue_id')
+    .select('id, venue_id, status, booking_date, start_time, end_time')
     .eq('id', bookingId)
     .maybeSingle();
 
@@ -773,7 +774,63 @@ async function verifyOwnerBookingAccess(bookingId: string, userId: string) {
     return { ok: false as const, error: 'Not authorized to manage this booking' };
   }
 
-  return { ok: true as const, bookingId: booking.id };
+  return {
+    ok: true as const,
+    bookingId: booking.id,
+    status: booking.status,
+    booking_date: booking.booking_date,
+    start_time: booking.start_time,
+    end_time: booking.end_time,
+  };
+}
+
+/**
+ * Mark confirmed bookings as completed once their end time has passed.
+ */
+export async function autoCompleteOwnerBookings(userId: string) {
+  try {
+    const { data: venues } = await supabaseServer
+      .from('venues')
+      .select('id')
+      .eq('owner_id', userId);
+
+    if (!venues?.length) {
+      return { completed: 0, error: null };
+    }
+
+    const venueIds = venues.map((venue) => venue.id);
+    const { data: bookings, error } = await supabaseServer
+      .from('bookings')
+      .select('id, booking_date, end_time, status')
+      .in('venue_id', venueIds)
+      .eq('status', 'confirmed');
+
+    if (error) {
+      return { completed: 0, error: error.message };
+    }
+
+    const idsToComplete = (bookings || [])
+      .filter((booking) => isBookingEndTimePassed(booking.booking_date, booking.end_time))
+      .map((booking) => booking.id);
+
+    if (idsToComplete.length === 0) {
+      return { completed: 0, error: null };
+    }
+
+    const { error: updateError } = await supabaseServer
+      .from('bookings')
+      .update({ status: 'completed' })
+      .in('id', idsToComplete);
+
+    if (updateError) {
+      return { completed: 0, error: updateError.message };
+    }
+
+    return { completed: idsToComplete.length, error: null };
+  } catch (error: any) {
+    console.error('Error auto-completing owner bookings:', error);
+    return { completed: 0, error: error.message || 'Failed to auto-complete bookings' };
+  }
 }
 
 /**
@@ -784,6 +841,13 @@ export async function deleteOwnerBooking(bookingId: string, userId: string) {
     const access = await verifyOwnerBookingAccess(bookingId, userId);
     if (!access.ok) {
       return { success: false, error: access.error };
+    }
+
+    if (isBookingEffectivelyCompleted(access)) {
+      return {
+        success: false,
+        error: 'Completed bookings cannot be deleted.',
+      };
     }
 
     const supabase = await getOwnerActionSupabase();
@@ -885,10 +949,11 @@ export async function fetchOwnerBookings(userId: string) {
  */
 export async function fetchOwnerAnalytics(userId: string) {
   try {
-    // Get owner's venues
+    await autoCompleteOwnerBookings(userId);
+
     const { data: venues } = await supabaseServer
       .from('venues')
-      .select('id, name, city, sport_type, total_bookings, created_at')
+      .select('id, name, city, sport_type, total_bookings, created_at, status')
       .eq('owner_id', userId);
 
     if (!venues || venues.length === 0) {
@@ -896,27 +961,47 @@ export async function fetchOwnerAnalytics(userId: string) {
         venues: [],
         totalBookings: 0,
         totalRevenue: 0,
-        recentBookings: []
+        recentBookings: [],
       };
     }
 
-    const venueIds = venues.map(v => v.id);
+    const venueIds = venues.map((venue) => venue.id);
 
-    // Fetch bookings for analytics
-    const { data: bookings } = await supabaseServer
-      .from('bookings')
-      .select('*, venues(name)')
-      .in('venue_id', venueIds)
-      .order('created_at', { ascending: false })
-      .limit(10);
+    const [{ data: bookings }, { data: completedBookings }] = await Promise.all([
+      supabaseServer
+        .from('bookings')
+        .select('*, venues(name)')
+        .in('venue_id', venueIds)
+        .order('created_at', { ascending: false })
+        .limit(10),
+      supabaseServer
+        .from('bookings')
+        .select('venue_id, total_price')
+        .in('venue_id', venueIds)
+        .eq('status', 'completed'),
+    ]);
 
-    const totalBookings = venues.reduce((sum, v) => sum + (v.total_bookings || 0), 0);
+    const venueRevenue = new Map<string, number>();
+    (completedBookings || []).forEach((booking) => {
+      const current = venueRevenue.get(booking.venue_id) || 0;
+      venueRevenue.set(booking.venue_id, current + (booking.total_price || 0));
+    });
+
+    const totalRevenue = (completedBookings || []).reduce(
+      (sum, booking) => sum + (booking.total_price || 0),
+      0
+    );
+
+    const totalBookings = venues.reduce((sum, venue) => sum + (venue.total_bookings || 0), 0);
 
     return {
-      venues,
+      venues: venues.map((venue) => ({
+        ...venue,
+        revenue: venueRevenue.get(venue.id) || 0,
+      })),
       totalBookings,
-      totalRevenue: 0, // Calculate if needed
-      recentBookings: bookings || []
+      totalRevenue,
+      recentBookings: bookings || [],
     };
   } catch (error) {
     console.error('Error fetching owner analytics:', error);
@@ -924,7 +1009,7 @@ export async function fetchOwnerAnalytics(userId: string) {
       venues: [],
       totalBookings: 0,
       totalRevenue: 0,
-      recentBookings: []
+      recentBookings: [],
     };
   }
 }
@@ -1271,6 +1356,8 @@ export type CreatePlayerBookingInput = {
   playerPhone: string;
   playerEmail: string;
   notes?: string | null;
+  discountType?: 'offer' | 'loyalty' | null;
+  discountLabel?: string | null;
 };
 
 /**
@@ -1322,6 +1409,8 @@ export async function createPlayerBooking(input: CreatePlayerBookingInput) {
       player_phone: input.playerPhone,
       player_email: input.playerEmail,
       notes: input.notes || null,
+      discount_type: input.discountType || null,
+      discount_label: input.discountLabel || null,
       status,
     });
 

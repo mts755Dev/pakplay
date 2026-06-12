@@ -573,6 +573,13 @@ export function VenueDetailClient({
         playerPhone,
         playerEmail,
         notes: null,
+        discountType: !isOwner ? selectedDiscount : null,
+        discountLabel:
+          !isOwner && selectedDiscount === "offer" && activeOffer
+            ? activeOffer.offer_name || "Special Offer"
+            : !isOwner && selectedDiscount === "loyalty" && loyaltyStatus?.currentTier
+              ? `${loyaltyStatus.currentTier.tier_name} Loyalty`
+              : null,
       });
 
       if (!result.success) {

@@ -65,6 +65,8 @@ export type Database = {
           total_price: number
           status: 'pending' | 'confirmed' | 'cancelled' | 'completed'
           notes: string | null
+          discount_type: 'offer' | 'loyalty' | null
+          discount_label: string | null
           whatsapp_sent: boolean
           created_at: string
           updated_at: string
@@ -82,6 +84,8 @@ export type Database = {
           total_price: number
           status?: 'pending' | 'confirmed' | 'cancelled' | 'completed'
           notes?: string | null
+          discount_type?: 'offer' | 'loyalty' | null
+          discount_label?: string | null
           whatsapp_sent?: boolean
           created_at?: string
           updated_at?: string
@@ -99,6 +103,8 @@ export type Database = {
           total_price?: number
           status?: 'pending' | 'confirmed' | 'cancelled' | 'completed'
           notes?: string | null
+          discount_type?: 'offer' | 'loyalty' | null
+          discount_label?: string | null
           whatsapp_sent?: boolean
           created_at?: string
           updated_at?: string

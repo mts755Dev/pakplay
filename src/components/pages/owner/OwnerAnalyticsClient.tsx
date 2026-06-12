@@ -27,7 +27,7 @@ export function OwnerAnalyticsClient({ initialData }: OwnerAnalyticsClientProps)
     city: venue.city,
     sport: venue.sport_type,
     bookings: venue.total_bookings || 0,
-    revenue: 0 // Revenue calculation would need booking prices
+    revenue: venue.revenue || 0,
   }));
   
   const [analytics] = useState({
@@ -80,7 +80,7 @@ export function OwnerAnalyticsClient({ initialData }: OwnerAnalyticsClientProps)
                       <div>
                         <p className="text-sm text-muted-foreground">Total Revenue</p>
                         <h3 className="text-2xl font-bold mt-2">PKR {analytics.totalRevenue.toLocaleString()}</h3>
-                        <p className="text-xs text-muted-foreground mt-1">All time</p>
+                        <p className="text-xs text-muted-foreground mt-1">From completed bookings only</p>
                       </div>
                       <DollarSign className="w-8 h-8 text-primary" />
                     </div>
