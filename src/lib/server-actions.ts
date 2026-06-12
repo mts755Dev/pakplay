@@ -1296,6 +1296,21 @@ export async function createPlayerBooking(input: CreatePlayerBookingInput) {
       };
     }
 
+    let status: 'pending' | 'confirmed' = 'pending';
+    const { data: venue } = await supabaseServer
+      .from('venues')
+      .select('owner_id')
+      .eq('id', input.venueId)
+      .maybeSingle();
+
+    if (venue?.owner_id) {
+      const supabase = await getOwnerActionSupabase();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.id === venue.owner_id) {
+        status = 'confirmed';
+      }
+    }
+
     const { error } = await supabaseServer.from('bookings').insert({
       venue_id: input.venueId,
       booking_date: input.bookingDate,
@@ -1307,7 +1322,7 @@ export async function createPlayerBooking(input: CreatePlayerBookingInput) {
       player_phone: input.playerPhone,
       player_email: input.playerEmail,
       notes: input.notes || null,
-      status: 'pending',
+      status,
     });
 
     if (error) {
