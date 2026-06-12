@@ -13,6 +13,7 @@ import { supabaseServer } from './supabase-server';
 import { getOwnerActionSupabase } from './supabase-owner';
 import { bookingToInterval, getCourtAvailability } from './court-availability';
 import { resolvePlayerBookingDetails } from './player-profile';
+import { verifyTurnstileToken } from './turnstile';
 import { Tables, Database } from '@/integrations/supabase/types';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
@@ -1841,5 +1842,110 @@ export async function fetchOwnerVenuesWithPhotos(userId: string) {
   } catch (error: any) {
     console.error('Error fetching owner venues with photos:', error);
     return { data: [], error: error.message };
+  }
+}
+
+// ==================== VENUE REVIEWS ====================
+
+export async function fetchVenueReviews(venueId: string) {
+  try {
+    const { data, error } = await supabaseServer
+      .from('venue_reviews')
+      .select('*')
+      .eq('venue_id', venueId)
+      .order('date', { ascending: false });
+
+    if (error) {
+      return { reviews: [] as VenueReview[], error: error.message };
+    }
+
+    return { reviews: data || [], error: null };
+  } catch (error: any) {
+    console.error('Error fetching venue reviews:', error);
+    return { reviews: [] as VenueReview[], error: error.message || 'Failed to fetch reviews' };
+  }
+}
+
+export async function createReviewPhotoUploadUrl(
+  venueId: string,
+  fileName: string,
+  index = 0
+) {
+  try {
+    const { data: venue, error: venueError } = await supabaseServer
+      .from('venues')
+      .select('id')
+      .eq('id', venueId)
+      .eq('status', 'approved')
+      .maybeSingle();
+
+    if (venueError || !venue) {
+      return { signedUrl: null, publicUrl: null, error: 'Venue not found' };
+    }
+
+    const fileExt = fileName.split('.').pop() || 'jpg';
+    const storagePath = `review-photos/${venueId}/${Date.now()}_${index}.${fileExt}`;
+
+    const { data, error } = await supabaseServer.storage
+      .from('venue-photos')
+      .createSignedUploadUrl(storagePath);
+
+    if (error || !data?.signedUrl) {
+      return { signedUrl: null, publicUrl: null, error: error?.message || 'Failed to create upload URL' };
+    }
+
+    const { data: { publicUrl } } = supabaseServer.storage
+      .from('venue-photos')
+      .getPublicUrl(storagePath);
+
+    return { signedUrl: data.signedUrl, publicUrl, error: null };
+  } catch (error: any) {
+    console.error('Error creating review photo upload URL:', error);
+    return { signedUrl: null, publicUrl: null, error: error.message || 'Failed to create upload URL' };
+  }
+}
+
+export async function submitVenueReview(input: {
+  venueId: string;
+  customerName: string;
+  rating: number;
+  reviewText: string;
+  photoUrls?: string[];
+  captchaToken: string;
+}) {
+  try {
+    const captcha = await verifyTurnstileToken(input.captchaToken);
+    if (!captcha.success) {
+      return { success: false, error: captcha.error || 'Captcha verification failed' };
+    }
+
+    const { data: venue, error: venueError } = await supabaseServer
+      .from('venues')
+      .select('id')
+      .eq('id', input.venueId)
+      .eq('status', 'approved')
+      .maybeSingle();
+
+    if (venueError || !venue) {
+      return { success: false, error: 'Venue not found' };
+    }
+
+    const { error } = await supabaseServer.from('venue_reviews').insert({
+      venue_id: input.venueId,
+      customer_name: input.customerName.trim(),
+      rating: input.rating,
+      review_text: input.reviewText.trim(),
+      photo_urls: input.photoUrls && input.photoUrls.length > 0 ? input.photoUrls : null,
+      date: new Date().toISOString().split('T')[0],
+    });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, error: null };
+  } catch (error: any) {
+    console.error('Error submitting venue review:', error);
+    return { success: false, error: error.message || 'Failed to submit review' };
   }
 }

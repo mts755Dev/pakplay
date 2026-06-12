@@ -16,6 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Tables } from "@/integrations/supabase/types";
 import { SpecialOfferBadge } from "@/components/SpecialOfferBadge";
 import { Turnstile } from "@marsidev/react-turnstile";
+import { TURNSTILE_SITE_KEY } from "@/lib/turnstile-config";
 import { formatFullLocation, getCityById } from "@/lib/locationHelpers";
 import ppLogo from "@/assets/pp logo.png";
 import { AdBanner, AdRectangle, AdNative } from "@/components/AdSlot";
@@ -25,9 +26,12 @@ import {
   fetchVenueBookingsForDate,
   fetchVenueLoyaltyTiers,
   fetchUserLoyaltyStatus,
+  fetchVenueReviews,
+  submitVenueReview,
   LoyaltyTier,
   type VenueDayBooking,
 } from "@/lib/server-actions";
+import { uploadReviewPhotos } from "@/lib/file-utils";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   buildBookingWhatsAppMessage,
@@ -676,51 +680,31 @@ export function VenueDetailClient({
     setSubmittingReview(true);
 
     try {
-      const { data: verifyData, error: verifyError } = await supabase.functions.invoke('verify-turnstile', {
-        body: { token: captchaToken }
+      let photoUrls: string[] = [];
+
+      if (reviewPhotos.length > 0) {
+        const uploadResult = await uploadReviewPhotos(venue.id, reviewPhotos);
+        if (uploadResult.error) {
+          throw new Error(uploadResult.error);
+        }
+        photoUrls = uploadResult.urls;
+      }
+
+      const result = await submitVenueReview({
+        venueId: venue.id,
+        customerName: reviewName,
+        rating: reviewRating,
+        reviewText: reviewText,
+        photoUrls,
+        captchaToken,
       });
 
-      if (verifyError || !verifyData?.success) {
-        throw new Error('Captcha verification failed. Please try again.');
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to submit review');
       }
-
-      let photoUrls: string[] = [];
-      
-      if (reviewPhotos.length > 0) {
-        for (const photo of reviewPhotos) {
-          const fileExt = photo.name.split('.').pop();
-          const fileName = `${venue.slug}_${Date.now()}.${fileExt}`;
-          const filePath = `review-photos/${fileName}`;
-
-          const { error: uploadError } = await supabase.storage
-            .from('venue-photos')
-            .upload(filePath, photo);
-
-          if (uploadError) throw uploadError;
-
-          const { data: { publicUrl } } = supabase.storage
-            .from('venue-photos')
-            .getPublicUrl(filePath);
-
-          photoUrls.push(publicUrl);
-        }
-      }
-
-      const { error: reviewError } = await supabase
-        .from('venue_reviews')
-        .insert({
-          venue_id: venue.id,
-          customer_name: reviewName,
-          rating: reviewRating,
-          review_text: reviewText,
-          photo_urls: photoUrls.length > 0 ? photoUrls : null,
-          date: new Date().toISOString().split('T')[0]
-        });
-
-      if (reviewError) throw reviewError;
 
       toast.success("Review submitted successfully!");
-      
+
       setReviewName("");
       setReviewRating(5);
       setReviewText("");
@@ -728,8 +712,12 @@ export function VenueDetailClient({
       setReviewPhotoPreviews([]);
       setCaptchaToken("");
       setTurnstileKey(prev => prev + 1);
-      
-      fetchVenue();
+
+      const reviewsResult = await fetchVenueReviews(venue.id);
+      if (!reviewsResult.error) {
+        setReviews(reviewsResult.reviews);
+        setVenue((prev) => (prev ? { ...prev, reviews: reviewsResult.reviews } : prev));
+      }
     } catch (error: any) {
       toast.error(error.message || "Failed to submit review");
     } finally {
@@ -1350,11 +1338,23 @@ export function VenueDetailClient({
                   </div>
 
                   <div>
-                    <Turnstile
-                      key={turnstileKey}
-                      siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!}
-                      onSuccess={(token) => setCaptchaToken(token)}
-                    />
+                    <Label>Verify you&apos;re human</Label>
+                    <div className="mt-2 min-h-[65px]">
+                      <Turnstile
+                        key={turnstileKey}
+                        siteKey={TURNSTILE_SITE_KEY}
+                        onSuccess={(token) => setCaptchaToken(token)}
+                        onError={() => {
+                          setCaptchaToken("");
+                          setTurnstileKey((prev) => prev + 1);
+                          toast.error("Captcha verification failed. Please try again.");
+                        }}
+                        onExpire={() => {
+                          setCaptchaToken("");
+                          setTurnstileKey((prev) => prev + 1);
+                        }}
+                      />
+                    </div>
                   </div>
                   
                   <Button 

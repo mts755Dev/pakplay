@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { Loader2, User, Building2, ArrowLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Turnstile } from "@marsidev/react-turnstile";
+import { TURNSTILE_SITE_KEY } from "@/lib/turnstile-config";
 import ppLogo from "@/assets/pp logo.png";
 
 export function SignUpPageClient() {
@@ -310,7 +311,7 @@ export function SignUpPageClient() {
               <div className="mt-2">
                 <Turnstile
                   key={turnstileKey}
-                  siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
+                  siteKey={TURNSTILE_SITE_KEY}
                   onSuccess={(token) => setCaptchaToken(token)}
                   onError={() => {
                     setCaptchaToken("");

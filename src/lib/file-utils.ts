@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  createReviewPhotoUploadUrl,
   createVenueLogoUploadUrl,
   createVenuePhotoUploadUrl,
 } from '@/lib/server-actions';
@@ -33,6 +34,31 @@ export async function uploadVenuePhotos(
       file.type || 'image/jpeg',
       i
     );
+
+    if (urlResult.error || !urlResult.signedUrl || !urlResult.publicUrl) {
+      return { urls, error: urlResult.error || 'Failed to prepare photo upload' };
+    }
+
+    try {
+      await uploadFileToSignedUrl(urlResult.signedUrl, file);
+      urls.push(urlResult.publicUrl);
+    } catch (error: any) {
+      return { urls, error: error.message || 'Failed to upload photo' };
+    }
+  }
+
+  return { urls, error: null };
+}
+
+export async function uploadReviewPhotos(
+  venueId: string,
+  files: File[]
+): Promise<{ urls: string[]; error: string | null }> {
+  const urls: string[] = [];
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const urlResult = await createReviewPhotoUploadUrl(venueId, file.name, i);
 
     if (urlResult.error || !urlResult.signedUrl || !urlResult.publicUrl) {
       return { urls, error: urlResult.error || 'Failed to prepare photo upload' };
