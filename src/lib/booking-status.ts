@@ -81,3 +81,23 @@ export function countsTowardRevenue(booking: BookingTimeFields): boolean {
 export function canOwnerDeleteBooking(booking: BookingTimeFields): boolean {
   return !isBookingEffectivelyCompleted(booking);
 }
+
+const OWNER_BOOKING_STATUS_PRIORITY: Record<EffectiveBookingStatus, number> = {
+  pending: 0,
+  confirmed: 1,
+  completed: 2,
+  cancelled: 3,
+  expired: 4,
+};
+
+export function sortBookingsForOwnerDisplay<T extends BookingTimeFields>(bookings: T[]): T[] {
+  return [...bookings].sort((a, b) => {
+    const statusA = getEffectiveBookingStatus(a);
+    const statusB = getEffectiveBookingStatus(b);
+    const statusDiff = OWNER_BOOKING_STATUS_PRIORITY[statusA] - OWNER_BOOKING_STATUS_PRIORITY[statusB];
+
+    if (statusDiff !== 0) return statusDiff;
+
+    return (a.start_time || '').localeCompare(b.start_time || '');
+  });
+}

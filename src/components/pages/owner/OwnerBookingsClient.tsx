@@ -19,6 +19,7 @@ import {
   getEffectiveBookingStatus,
   isBookingEffectivelyCompleted,
   matchesBookingDate,
+  sortBookingsForOwnerDisplay,
 } from "@/lib/booking-status";
 
 const DATE_FILTER_PARAM = "date";
@@ -95,7 +96,10 @@ export function OwnerBookingsClient({ initialBookings, userId }: OwnerBookingsCl
   }, [userId]);
 
   const filteredBookings = useMemo(
-    () => bookings.filter((booking) => matchesBookingDate(booking.booking_date, activeDate)),
+    () =>
+      sortBookingsForOwnerDisplay(
+        bookings.filter((booking) => matchesBookingDate(booking.booking_date, activeDate))
+      ),
     [bookings, activeDate]
   );
 

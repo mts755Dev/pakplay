@@ -3,13 +3,15 @@
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { Card } from "@/components/ui/card";
 import { useState } from "react";
-import { TrendingUp, Building2, Calendar, DollarSign, Users } from "lucide-react";
+import { TrendingUp, Building2, Calendar, Banknote } from "lucide-react";
 
 interface OwnerAnalyticsClientProps {
   initialData: {
     venues: any[];
     totalBookings: number;
     totalRevenue: number;
+    revenueThisMonth: number;
+    monthLabel: string;
     recentBookings: any[];
   };
 }
@@ -36,6 +38,8 @@ export function OwnerAnalyticsClient({ initialData }: OwnerAnalyticsClientProps)
     pendingVenues,
     totalBookings: initialData.totalBookings,
     totalRevenue: initialData.totalRevenue,
+    revenueThisMonth: initialData.revenueThisMonth ?? 0,
+    monthLabel: initialData.monthLabel ?? '',
     venueStats: venueStats,
     recentBookings: initialData.recentBookings.length,
   });
@@ -79,24 +83,26 @@ export function OwnerAnalyticsClient({ initialData }: OwnerAnalyticsClientProps)
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm text-muted-foreground">Total Revenue</p>
-                        <h3 className="text-2xl font-bold mt-2">PKR {analytics.totalRevenue.toLocaleString()}</h3>
+                        <h3 className="text-2xl font-bold mt-2">
+                          PKR {analytics.totalRevenue.toLocaleString()}
+                        </h3>
                         <p className="text-xs text-muted-foreground mt-1">From completed bookings only</p>
                       </div>
-                      <DollarSign className="w-8 h-8 text-primary" />
+                      <Banknote className="w-8 h-8 text-primary shrink-0" />
                     </div>
                   </Card>
                   <Card className="p-6">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm text-muted-foreground">Avg per Venue</p>
+                        <p className="text-sm text-muted-foreground">Revenue this month</p>
                         <h3 className="text-2xl font-bold mt-2">
-                          PKR {analytics.totalVenues > 0 
-                            ? Math.round(analytics.totalRevenue / analytics.totalVenues).toLocaleString() 
-                            : 0}
+                          PKR {analytics.revenueThisMonth.toLocaleString()}
                         </h3>
-                        <p className="text-xs text-muted-foreground mt-1">Revenue</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {analytics.monthLabel} · completed bookings
+                        </p>
                       </div>
-                      <TrendingUp className="w-8 h-8 text-primary" />
+                      <TrendingUp className="w-8 h-8 text-primary shrink-0" />
                     </div>
                   </Card>
                 </div>

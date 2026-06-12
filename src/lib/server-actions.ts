@@ -3,7 +3,12 @@
 "use server";
 
 import { getServerUser } from './auth-server';
-import { isBookingEffectivelyCompleted, isBookingEndTimePassed } from './booking-status';
+import {
+  isBookingEffectivelyCompleted,
+  isBookingEndTimePassed,
+  normalizeBookingDateKey,
+} from './booking-status';
+import { format, startOfMonth } from 'date-fns';
 import { supabaseServer } from './supabase-server';
 import { getOwnerActionSupabase } from './supabase-owner';
 import { bookingToInterval, getCourtAvailability } from './court-availability';
@@ -961,11 +966,14 @@ export async function fetchOwnerAnalytics(userId: string) {
         venues: [],
         totalBookings: 0,
         totalRevenue: 0,
+        revenueThisMonth: 0,
+        monthLabel: format(new Date(), 'MMMM yyyy'),
         recentBookings: [],
       };
     }
 
     const venueIds = venues.map((venue) => venue.id);
+    const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd');
 
     const [{ data: bookings }, { data: completedBookings }] = await Promise.all([
       supabaseServer
@@ -976,7 +984,7 @@ export async function fetchOwnerAnalytics(userId: string) {
         .limit(10),
       supabaseServer
         .from('bookings')
-        .select('venue_id, total_price')
+        .select('venue_id, total_price, booking_date')
         .in('venue_id', venueIds)
         .eq('status', 'completed'),
     ]);
@@ -992,6 +1000,10 @@ export async function fetchOwnerAnalytics(userId: string) {
       0
     );
 
+    const revenueThisMonth = (completedBookings || [])
+      .filter((booking) => normalizeBookingDateKey(booking.booking_date) >= monthStart)
+      .reduce((sum, booking) => sum + (booking.total_price || 0), 0);
+
     const totalBookings = venues.reduce((sum, venue) => sum + (venue.total_bookings || 0), 0);
 
     return {
@@ -1001,6 +1013,8 @@ export async function fetchOwnerAnalytics(userId: string) {
       })),
       totalBookings,
       totalRevenue,
+      revenueThisMonth,
+      monthLabel: format(new Date(), 'MMMM yyyy'),
       recentBookings: bookings || [],
     };
   } catch (error) {
@@ -1009,6 +1023,8 @@ export async function fetchOwnerAnalytics(userId: string) {
       venues: [],
       totalBookings: 0,
       totalRevenue: 0,
+      revenueThisMonth: 0,
+      monthLabel: format(new Date(), 'MMMM yyyy'),
       recentBookings: [],
     };
   }

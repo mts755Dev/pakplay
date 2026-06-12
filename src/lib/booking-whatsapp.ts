@@ -14,6 +14,14 @@ type BookingWhatsAppMessageParams = {
   notes?: string | null;
 };
 
+/** Strip characters that often render as ? in WhatsApp Web prefilled messages */
+export function sanitizeWhatsAppMessage(message: string): string {
+  return message
+    .replace(/\uFE0F/g, '')
+    .replace(/\uFE0E/g, '')
+    .replace(/[\u2500-\u257F]/g, '-');
+}
+
 function formatBookingDate(date: string): string {
   try {
     return format(parseISO(date), 'EEEE, d MMMM yyyy');
@@ -37,13 +45,13 @@ function buildDetailsBlock(
   return (
     `📅 *Date:* ${formatBookingDate(bookingDate)}\n` +
     `⏰ *Time:* ${startTimeLabel} - ${endTimeLabel}\n` +
-    `⏱️ *Duration:* ${formatDuration(totalHours)}\n\n` +
+    `*Duration:* ${formatDuration(totalHours)}\n\n` +
     `💰 *Total Amount:* PKR ${totalPrice.toLocaleString()}` +
     `${notes?.trim() ? `\n\n📝 *Notes:*\n${notes.trim()}` : ''}`
   );
 }
 
-const FOOTER = `\n\n━━━━━━━━━━━━━━━\n✨ *PakPlay*\n🌐 www.pakplay.co`;
+const FOOTER = `\n\n-----------------\n⭐ *PakPlay*\nwww.pakplay.co`;
 
 export function buildBookingWhatsAppMessage({
   isOwnerBooking,
@@ -67,26 +75,22 @@ export function buildBookingWhatsAppMessage({
     notes
   );
 
-  if (isOwnerBooking) {
-    return (
-      `🎾 *Booking Confirmation* 🎾\n\n` +
+  const message = isOwnerBooking
+    ? `🎾 *Booking Confirmation* 🎾\n\n` +
       `Hi ${playerName},\n\n` +
       `Your booking at *${venueName}* has been confirmed.\n\n` +
       detailsBlock +
       FOOTER
-    );
-  }
+    : `🎾 *PakPlay Booking Request* 🎾\n\n` +
+      `📍 *Venue:* ${venueName}\n` +
+      detailsBlock +
+      `\n\n👤 *Customer Details:*\n` +
+      `Name: ${playerName}\n` +
+      `Phone: ${playerPhone}\n` +
+      `Email: ${playerEmail}` +
+      FOOTER;
 
-  return (
-    `🎾 *PakPlay Booking Request* 🎾\n\n` +
-    `📍 *Venue:* ${venueName}\n` +
-    detailsBlock +
-    `\n\n👤 *Customer Details:*\n` +
-    `Name: ${playerName}\n` +
-    `Phone: ${playerPhone}\n` +
-    `Email: ${playerEmail}` +
-    FOOTER
-  );
+  return sanitizeWhatsAppMessage(message);
 }
 
 export function getBookingWhatsAppTarget(
