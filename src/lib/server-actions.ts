@@ -2,6 +2,7 @@
 // These are NOT hooks - they're server-only functions
 "use server";
 
+import { getServerUser } from './auth-server';
 import { supabaseServer } from './supabase-server';
 import { getOwnerActionSupabase } from './supabase-owner';
 import { bookingToInterval, getCourtAvailability } from './court-availability';
@@ -1304,8 +1305,7 @@ export async function createPlayerBooking(input: CreatePlayerBookingInput) {
       .maybeSingle();
 
     if (venue?.owner_id) {
-      const supabase = await getOwnerActionSupabase();
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getServerUser();
       if (user?.id === venue.owner_id) {
         status = 'confirmed';
       }
