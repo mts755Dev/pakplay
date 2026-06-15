@@ -1,4 +1,4 @@
-import { supabase } from '@/integrations/supabase/client';
+import { signOutUser } from '@/lib/server-actions';
 
 /** Clear cached auth state and Supabase cookies without redirecting. */
 export function clearAuthSession() {
@@ -32,7 +32,7 @@ export function clearAuthSession() {
     // Ignore storage errors
   }
 
-  supabase.auth.signOut().catch(() => {});
+  signOutUser().catch(() => {});
 }
 
 /**

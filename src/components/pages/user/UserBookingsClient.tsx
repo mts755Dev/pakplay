@@ -5,14 +5,13 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { supabase } from "@/integrations/supabase/client";
 import { Calendar, Clock, MapPin, User, DollarSign, Loader2, ArrowLeft, Filter } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { fetchUserBookings } from "@/lib/server-actions";
+import { fetchUserBookings, cancelUserBooking, cleanupUserBookings } from "@/lib/server-actions";
 
 interface Booking {
   id: string;
@@ -94,53 +93,27 @@ export function UserBookingsClient() {
     }
   };
 
-  // Helper function to delete expired pending bookings
-  const deleteExpiredPendingBookings = async (bookingsToCheck: Booking[]) => {
-    const expiredBookingIds = bookingsToCheck
-      .filter(booking => {
-        // Pending bookings with passed start time should be deleted
-        return booking.status === 'pending' && isBookingStartTimePassed(booking.booking_date, booking.start_time);
-      })
-      .map(booking => booking.id);
-
-    if (expiredBookingIds.length > 0) {
-      try {
-        const { error } = await supabase
-          .from('bookings')
-          .delete()
-          .in('id', expiredBookingIds);
-
-        if (error) {
-          console.error('Error deleting expired bookings:', error);
-        }
-      } catch (error) {
-        console.error('Error deleting expired bookings:', error);
-      }
-    }
-  };
-
-  // Helper function to auto-complete confirmed bookings with passed end time
   const autoCompleteBookings = async (bookingsToCheck: Booking[]) => {
     const bookingsToComplete = bookingsToCheck
       .filter(booking => {
-        // Only update if status is still 'confirmed' in DB but end time has passed
         return booking.status === 'confirmed' && isBookingEndTimePassed(booking.booking_date, booking.end_time);
       })
       .map(booking => booking.id);
 
     if (bookingsToComplete.length > 0) {
-      try {
-        const { error } = await supabase
-          .from('bookings')
-          .update({ status: 'completed' })
-          .in('id', bookingsToComplete);
+      cleanupUserBookings(userEmail || '', [], bookingsToComplete).catch(() => {});
+    }
+  };
 
-        if (error) {
-          console.error('Error auto-completing bookings:', error);
-        }
-      } catch (error) {
-        console.error('Error auto-completing bookings:', error);
-      }
+  const deleteExpiredPendingBookings = async (bookingsToCheck: Booking[]) => {
+    const expiredBookingIds = bookingsToCheck
+      .filter(booking => {
+        return booking.status === 'pending' && isBookingStartTimePassed(booking.booking_date, booking.start_time);
+      })
+      .map(booking => booking.id);
+
+    if (expiredBookingIds.length > 0 && userEmail) {
+      cleanupUserBookings(userEmail, expiredBookingIds, []).catch(() => {});
     }
   };
 
@@ -223,12 +196,10 @@ export function UserBookingsClient() {
     if (!cancellingId) return;
 
     try {
-      const { error } = await supabase
-        .from('bookings')
-        .update({ status: 'cancelled' })
-        .eq('id', cancellingId);
+      if (!userEmail) throw new Error('You must be signed in');
 
-      if (error) throw error;
+      const result = await cancelUserBooking(cancellingId, userEmail);
+      if (!result.success) throw new Error(result.error || 'Failed to cancel booking');
 
       setBookings(prev => 
         prev.map(b => 

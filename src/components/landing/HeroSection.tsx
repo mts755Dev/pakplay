@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { Search, MapPin, Calendar, Zap, CheckCircle } from "lucide-react";
 import heroImage from "@/assets/hero-venue.jpg";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { fetchAppStats } from "@/lib/server-actions";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useState } from "react";
 import { getAllProvinces, getCitiesByProvince } from "@/lib/locationHelpers";
@@ -39,16 +39,10 @@ export const HeroSection = ({ initialStats, userRole }: HeroSectionProps) => {
   const { data: stats } = useQuery({
     queryKey: ['hero-stats'],
     queryFn: async () => {
-      const { data: venues } = await supabase
-        .from('venues')
-        .select('id, city')
-        .eq('status', 'approved');
-      
-      const uniqueCities = new Set(venues?.map(v => v.city) || []);
-      
+      const stats = await fetchAppStats();
       return {
-        venues: venues?.length || 0,
-        cities: uniqueCities.size || 0,
+        venues: stats.totalVenues || 0,
+        cities: stats.totalCities || 0,
         bookings: "10,000+",
       };
     },

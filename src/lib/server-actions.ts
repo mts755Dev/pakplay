@@ -2185,3 +2185,1074 @@ export async function updateOwnerVenueSubdomain(
     return { success: false, error: error.message || 'Failed to update subdomain' };
   }
 }
+
+// ==================== SHARED SESSION HELPERS ====================
+
+type SessionResult =
+  | { ok: true; userId: string }
+  | { ok: false; error: string };
+
+async function requireAuthSession(): Promise<SessionResult> {
+  const supabase = createAuthActionClient();
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) return { ok: false, error: 'Not authenticated' };
+  return { ok: true, userId: user.id };
+}
+
+async function requireAdminSession(): Promise<SessionResult> {
+  const auth = await requireAuthSession();
+  if (!auth.ok) return auth;
+
+  const { data: profile } = await supabaseServer
+    .from('profiles')
+    .select('role')
+    .eq('id', auth.userId)
+    .maybeSingle();
+
+  if (profile?.role !== 'admin') return { ok: false, error: 'Access denied' };
+  return auth;
+}
+
+// ==================== AUTH ACTIONS ====================
+
+export async function signInUser(input: {
+  email: string;
+  password: string;
+  mode: 'user' | 'admin';
+}) {
+  try {
+    const supabase = createAuthActionClient();
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: input.email.trim(),
+      password: input.password,
+    });
+
+    if (error) {
+      return { success: false, error: error.message, profile: null, userId: null, email: null };
+    }
+
+    if (!data.user) {
+      return { success: false, error: 'Sign in failed', profile: null, userId: null, email: null };
+    }
+
+    const { data: profile } = await supabaseServer
+      .from('profiles')
+      .select('role, full_name, phone, whatsapp_number')
+      .eq('id', data.user.id)
+      .maybeSingle();
+
+    if (input.mode === 'admin' && profile?.role !== 'admin') {
+      await supabase.auth.signOut();
+      return { success: false, error: 'Access denied. Admin credentials required.', profile: null, userId: null, email: null };
+    }
+
+    if (input.mode === 'user' && profile?.role === 'admin') {
+      await supabase.auth.signOut();
+      return { success: false, error: 'Admins must sign in at /admin', profile: null, userId: null, email: null };
+    }
+
+    return {
+      success: true,
+      error: null,
+      userId: data.user.id,
+      email: data.user.email || input.email.trim(),
+      profile,
+    };
+  } catch (error: any) {
+    console.error('Error signing in:', error);
+    return { success: false, error: error.message || 'Sign in failed', profile: null, userId: null, email: null };
+  }
+}
+
+export async function signOutUser() {
+  try {
+    const supabase = createAuthActionClient();
+    await supabase.auth.signOut();
+    return { success: true, error: null };
+  } catch (error: any) {
+    console.error('Error signing out:', error);
+    return { success: false, error: error.message || 'Sign out failed' };
+  }
+}
+
+export async function getAdminSession() {
+  try {
+    const supabase = createAuthActionClient();
+    const { data: { user }, error } = await supabase.auth.getUser();
+
+    if (error || !user) {
+      return { success: false, isAdmin: false, user: null, error: 'Not authenticated' };
+    }
+
+    const { data: profile } = await supabaseServer
+      .from('profiles')
+      .select('role, full_name, phone')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (profile?.role !== 'admin') {
+      return { success: false, isAdmin: false, user: null, error: 'Access denied' };
+    }
+
+    return {
+      success: true,
+      isAdmin: true,
+      user: { id: user.id, email: user.email },
+      error: null,
+    };
+  } catch (error: any) {
+    console.error('Error getting admin session:', error);
+    return { success: false, isAdmin: false, user: null, error: error.message || 'Session check failed' };
+  }
+}
+
+export async function fetchUserProfileById(userId: string) {
+  try {
+    const { data, error } = await supabaseServer
+      .from('profiles')
+      .select('role, full_name, phone, whatsapp_number')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (error) return { profile: null, error: error.message };
+    return { profile: data, error: null };
+  } catch (error: any) {
+    console.error('Error fetching user profile:', error);
+    return { profile: null, error: error.message || 'Failed to fetch profile' };
+  }
+}
+
+export async function deleteUserAccount() {
+  try {
+    const auth = await requireAuthSession();
+    if (!auth.ok) return { success: false, error: auth.error };
+
+    const supabase = createAuthActionClient();
+    const { error } = await supabase.rpc('delete_user_account');
+
+    if (error) return { success: false, error: error.message };
+    await supabase.auth.signOut();
+    return { success: true, error: null };
+  } catch (error: any) {
+    console.error('Error deleting user account:', error);
+    return { success: false, error: error.message || 'Failed to delete account' };
+  }
+}
+
+export async function updateUserEmail(newEmail: string) {
+  try {
+    const email = newEmail.trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return { success: false, error: 'Please enter a valid email address' };
+    }
+
+    const supabase = createAuthActionClient();
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      return { success: false, error: 'You must be signed in' };
+    }
+
+    const { error } = await supabase.auth.updateUser({ email });
+    if (error) return { success: false, error: error.message };
+
+    return { success: true, error: null };
+  } catch (error: any) {
+    console.error('Error updating email:', error);
+    return { success: false, error: error.message || 'Failed to update email' };
+  }
+}
+
+// ==================== VENUE FETCH (PUBLIC) ====================
+
+export async function fetchVenueBySubdomain(subdomain: string): Promise<VenueWithData | null> {
+  try {
+    const { data: venue, error } = await supabaseServer
+      .from('venues')
+      .select('*, venue_photos(*)')
+      .eq('subdomain', subdomain)
+      .eq('status', 'approved')
+      .single();
+
+    if (error || !venue) return null;
+
+    venue.venue_photos.sort((a, b) => a.display_order - b.display_order);
+
+    const [reviewsResult, offerResult] = await Promise.all([
+      supabaseServer
+        .from('venue_reviews')
+        .select('*')
+        .eq('venue_id', venue.id)
+        .order('date', { ascending: false }),
+      supabaseServer
+        .from('special_offers')
+        .select('*')
+        .eq('venue_id', venue.id)
+        .eq('is_active', true)
+        .lte('valid_from', new Date().toISOString())
+        .gte('valid_until', new Date().toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    return {
+      ...venue,
+      reviews: reviewsResult.data || [],
+      active_offer: offerResult.data || null,
+      calculated_rating:
+        reviewsResult.data && reviewsResult.data.length > 0
+          ? reviewsResult.data.reduce((acc, r) => acc + r.rating, 0) / reviewsResult.data.length
+          : 0,
+      review_count: reviewsResult.data?.length || 0,
+    };
+  } catch (error) {
+    console.error('Error fetching venue by subdomain:', error);
+    return null;
+  }
+}
+
+// ==================== USER BOOKING ACTIONS ====================
+
+export async function cancelUserBooking(bookingId: string, userEmail: string) {
+  try {
+    const auth = await requireAuthSession();
+    if (!auth.ok) return { success: false, error: auth.error };
+
+    const { data: booking, error: fetchError } = await supabaseServer
+      .from('bookings')
+      .select('id, player_email')
+      .eq('id', bookingId)
+      .maybeSingle();
+
+    if (fetchError || !booking) return { success: false, error: 'Booking not found' };
+    if (booking.player_email?.toLowerCase() !== userEmail.trim().toLowerCase()) {
+      return { success: false, error: 'Not authorized to cancel this booking' };
+    }
+
+    const { error } = await supabaseServer
+      .from('bookings')
+      .update({ status: 'cancelled' })
+      .eq('id', bookingId);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true, error: null };
+  } catch (error: any) {
+    console.error('Error cancelling booking:', error);
+    return { success: false, error: error.message || 'Failed to cancel booking' };
+  }
+}
+
+export async function cleanupUserBookings(
+  userEmail: string,
+  expiredIds: string[],
+  completeIds: string[]
+) {
+  try {
+    if (expiredIds.length === 0 && completeIds.length === 0) {
+      return { success: true, error: null };
+    }
+
+    const { data: bookings } = await supabaseServer
+      .from('bookings')
+      .select('id, player_email')
+      .in('id', [...expiredIds, ...completeIds]);
+
+    const ownedIds = new Set(
+      (bookings || [])
+        .filter((b) => b.player_email?.toLowerCase() === userEmail.trim().toLowerCase())
+        .map((b) => b.id)
+    );
+
+    const safeExpired = expiredIds.filter((id) => ownedIds.has(id));
+    const safeComplete = completeIds.filter((id) => ownedIds.has(id));
+
+    if (safeExpired.length > 0) {
+      await supabaseServer.from('bookings').delete().in('id', safeExpired);
+    }
+
+    if (safeComplete.length > 0) {
+      await supabaseServer
+        .from('bookings')
+        .update({ status: 'completed' })
+        .in('id', safeComplete);
+    }
+
+    return { success: true, error: null };
+  } catch (error: any) {
+    console.error('Error cleaning up user bookings:', error);
+    return { success: false, error: error.message || 'Failed to clean up bookings' };
+  }
+}
+
+// ==================== OWNER VENUE ACTIONS ====================
+
+export async function fetchOwnerVenuesList(userId: string) {
+  try {
+    const auth = await requireAuthSession();
+    if (!auth.ok || auth.userId !== userId) {
+      return { data: [], error: auth.ok ? 'Not authorized' : auth.error };
+    }
+
+    const { data, error } = await supabaseServer
+      .from('venues')
+      .select('*, venue_photos(*)')
+      .eq('owner_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) return { data: [], error: error.message };
+    return { data: data || [], error: null };
+  } catch (error: any) {
+    console.error('Error fetching owner venues list:', error);
+    return { data: [], error: error.message || 'Failed to load venues' };
+  }
+}
+
+export async function deleteOwnerVenue(userId: string, venueId: string) {
+  try {
+    const venueAccess = await verifyOwnerVenueAccess(venueId, userId);
+    if (!venueAccess.ok) return { success: false, error: venueAccess.error };
+
+    const { error } = await supabaseServer.from('venues').delete().eq('id', venueId);
+    if (error) return { success: false, error: error.message };
+    return { success: true, error: null };
+  } catch (error: any) {
+    console.error('Error deleting owner venue:', error);
+    return { success: false, error: error.message || 'Failed to delete venue' };
+  }
+}
+
+export async function reportOwnerReview(input: {
+  userId: string;
+  reviewId: string;
+  venueId: string;
+  reason: string;
+}) {
+  try {
+    const venueAccess = await verifyOwnerVenueAccess(input.venueId, input.userId);
+    if (!venueAccess.ok) return { success: false, error: venueAccess.error };
+
+    const { error } = await supabaseServer.from('review_reports').insert({
+      review_id: input.reviewId,
+      venue_id: input.venueId,
+      reporter_id: input.userId,
+      reason: input.reason.trim(),
+    });
+
+    if (error) return { success: false, error: error.message };
+    return { success: true, error: null };
+  } catch (error: any) {
+    console.error('Error reporting review:', error);
+    return { success: false, error: error.message || 'Failed to submit report' };
+  }
+}
+
+export async function createOnboardingLogoUploadUrl(userId: string, fileName: string) {
+  try {
+    const auth = await requireAuthSession();
+    if (!auth.ok || auth.userId !== userId) {
+      return { signedUrl: null, publicUrl: null, error: 'Not authorized' };
+    }
+
+    const fileExt = fileName.split('.').pop() || 'png';
+    const storagePath = `${userId}/onboarding/logo_${Date.now()}.${fileExt}`;
+
+    const { data, error } = await supabaseServer.storage
+      .from('venue-logos')
+      .createSignedUploadUrl(storagePath);
+
+    if (error || !data?.signedUrl) {
+      return { signedUrl: null, publicUrl: null, error: error?.message || 'Failed to create upload URL' };
+    }
+
+    const { data: { publicUrl } } = supabaseServer.storage.from('venue-logos').getPublicUrl(storagePath);
+    return { signedUrl: data.signedUrl, publicUrl, error: null };
+  } catch (error: any) {
+    return { signedUrl: null, publicUrl: null, error: error.message || 'Failed to create upload URL' };
+  }
+}
+
+export async function createOnboardingPhotoUploadUrl(
+  userId: string,
+  fileName: string,
+  index = 0
+) {
+  try {
+    const auth = await requireAuthSession();
+    if (!auth.ok || auth.userId !== userId) {
+      return { signedUrl: null, publicUrl: null, error: 'Not authorized' };
+    }
+
+    const fileExt = fileName.split('.').pop() || 'jpg';
+    const storagePath = `${userId}/onboarding/${Date.now()}_${index}.${fileExt}`;
+
+    const { data, error } = await supabaseServer.storage
+      .from('venue-photos')
+      .createSignedUploadUrl(storagePath);
+
+    if (error || !data?.signedUrl) {
+      return { signedUrl: null, publicUrl: null, error: error?.message || 'Failed to create upload URL' };
+    }
+
+    const { data: { publicUrl } } = supabaseServer.storage.from('venue-photos').getPublicUrl(storagePath);
+    return { signedUrl: data.signedUrl, publicUrl, error: null };
+  } catch (error: any) {
+    return { signedUrl: null, publicUrl: null, error: error.message || 'Failed to create upload URL' };
+  }
+}
+
+export async function createOwnerVenueOnboarding(input: {
+  userId: string;
+  venueName: string;
+  sport: 'cricket' | 'football' | 'futsal' | 'pickleball' | 'badminton' | 'padel';
+  province?: string | null;
+  city: string;
+  area?: string | null;
+  subArea?: string | null;
+  address: string;
+  description: string;
+  amenities?: string[] | null;
+  pricePerHour: number;
+  numberOfCourts: number;
+  openingTime?: string | null;
+  closingTime?: string | null;
+  is24_7: boolean;
+  phone: string;
+  logoUrl?: string | null;
+  tagline?: string | null;
+  facebookUrl?: string | null;
+  instagramUrl?: string | null;
+  googleMapsUrl?: string | null;
+  photoUrls: string[];
+  pricingRules: Array<{
+    daysOfWeek: string[];
+    startTime: string;
+    endTime: string;
+    price: string;
+  }>;
+}) {
+  try {
+    const auth = await requireAuthSession();
+    if (!auth.ok || auth.userId !== input.userId) {
+      return { success: false, error: 'Not authorized', venueId: null };
+    }
+
+    let slug = input.venueName
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .trim();
+
+    const { data: slugData } = await supabaseServer.rpc('generate_venue_slug', {
+      venue_name: input.venueName,
+    });
+    if (slugData) slug = slugData;
+
+    const { data: venue, error: venueError } = await supabaseServer
+      .from('venues')
+      .insert({
+        owner_id: input.userId,
+        name: input.venueName,
+        slug,
+        sport_type: input.sport,
+        province: input.province || null,
+        city: input.city,
+        area: input.area || null,
+        sub_area: input.subArea || null,
+        address: input.address,
+        description: input.description,
+        amenities: input.amenities && input.amenities.length > 0 ? input.amenities : null,
+        price_per_hour: input.pricePerHour,
+        number_of_courts: input.numberOfCourts,
+        opening_time: input.is24_7 ? null : input.openingTime || null,
+        closing_time: input.is24_7 ? null : input.closingTime || null,
+        is_24_7: input.is24_7,
+        whatsapp_number: input.phone,
+        status: 'pending',
+        logo_url: input.logoUrl || null,
+        tagline: input.tagline || null,
+        facebook_url: input.facebookUrl || null,
+        instagram_url: input.instagramUrl || null,
+        google_maps_url: input.googleMapsUrl || null,
+      })
+      .select()
+      .single();
+
+    if (venueError || !venue) {
+      return { success: false, error: venueError?.message || 'Failed to create venue', venueId: null };
+    }
+
+    if (input.photoUrls.length > 0) {
+      const photoInserts = input.photoUrls.map((url, index) => ({
+        venue_id: venue.id,
+        photo_url: url,
+        is_primary: index === 0,
+        display_order: index,
+      }));
+      await supabaseServer.from('venue_photos').insert(photoInserts);
+    }
+
+    if (input.pricingRules.length > 0) {
+      const pricingInserts: Array<{
+        venue_id: string;
+        day_of_week: number | null;
+        start_time: string | null;
+        end_time: string | null;
+        price_per_hour: number;
+        priority: number;
+      }> = [];
+
+      input.pricingRules.forEach((rule, index) => {
+        if (rule.daysOfWeek.length === 0) {
+          pricingInserts.push({
+            venue_id: venue.id,
+            day_of_week: null,
+            start_time: rule.startTime || null,
+            end_time: rule.endTime || null,
+            price_per_hour: parseFloat(rule.price),
+            priority: index,
+          });
+        } else {
+          rule.daysOfWeek.forEach((day) => {
+            pricingInserts.push({
+              venue_id: venue.id,
+              day_of_week: parseInt(day, 10),
+              start_time: rule.startTime || null,
+              end_time: rule.endTime || null,
+              price_per_hour: parseFloat(rule.price),
+              priority: index,
+            });
+          });
+        }
+      });
+
+      if (pricingInserts.length > 0) {
+        await supabaseServer.from('venue_pricing_rules').insert(pricingInserts as never);
+      }
+    }
+
+    return { success: true, error: null, venueId: venue.id };
+  } catch (error: any) {
+    console.error('Error creating owner venue:', error);
+    return { success: false, error: error.message || 'Failed to submit venue', venueId: null };
+  }
+}
+
+// ==================== ADMIN ACTIONS ====================
+
+export async function updateAdminVenueStatus(
+  venueId: string,
+  status: 'approved' | 'pending' | 'rejected' | 'inactive'
+) {
+  try {
+    const admin = await requireAdminSession();
+    if (!admin.ok) return { success: false, error: admin.error };
+
+    const { error } = await supabaseServer
+      .from('venues')
+      .update({ status })
+      .eq('id', venueId);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true, error: null };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to update venue status' };
+  }
+}
+
+export async function setAdminVenueFeatured(venueId: string, featured: boolean) {
+  try {
+    const admin = await requireAdminSession();
+    if (!admin.ok) return { success: false, error: admin.error };
+
+    const { error } = await supabaseServer
+      .from('venues')
+      .update({ featured })
+      .eq('id', venueId);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true, error: null };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to update featured status' };
+  }
+}
+
+export async function fetchAdminPendingVenues() {
+  try {
+    const admin = await requireAdminSession();
+    if (!admin.ok) return { data: [], error: admin.error };
+
+    const { data: venuesData, error } = await supabaseServer
+      .from('venues')
+      .select('*')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+
+    if (error) return { data: [], error: error.message };
+    if (!venuesData || venuesData.length === 0) return { data: [], error: null };
+
+    const venueIds = venuesData.map((v) => v.id);
+    const ownerIds = venuesData.map((v) => v.owner_id).filter((id): id is string => id !== null);
+
+    const [profilesResult, photosResult] = await Promise.all([
+      ownerIds.length > 0
+        ? supabaseServer.from('profiles').select('id, full_name, phone, whatsapp_number').in('id', ownerIds)
+        : Promise.resolve({ data: [], error: null }),
+      supabaseServer
+        .from('venue_photos')
+        .select('*')
+        .in('venue_id', venueIds)
+        .order('display_order', { ascending: true }),
+    ]);
+
+    const profilesMap = new Map((profilesResult.data || []).map((p) => [p.id, p]));
+    const photosMap = new Map<string, VenuePhoto[]>();
+    (photosResult.data || []).forEach((photo) => {
+      if (!photosMap.has(photo.venue_id)) photosMap.set(photo.venue_id, []);
+      photosMap.get(photo.venue_id)!.push(photo);
+    });
+
+    const data = venuesData.map((venue) => ({
+      ...venue,
+      profiles: venue.owner_id ? profilesMap.get(venue.owner_id) : null,
+      venue_photos: photosMap.get(venue.id) || [],
+    }));
+
+    return { data, error: null };
+  } catch (error: any) {
+    return { data: [], error: error.message || 'Failed to load pending venues' };
+  }
+}
+
+export async function fetchAdminVenueDetail(venueId: string) {
+  try {
+    const admin = await requireAdminSession();
+    if (!admin.ok) return { data: null, error: admin.error };
+
+    const { data: venueData, error } = await supabaseServer
+      .from('venues')
+      .select('*, venue_photos(*), venue_pricing_rules(*)')
+      .eq('id', venueId)
+      .single();
+
+    if (error || !venueData) return { data: null, error: error?.message || 'Venue not found' };
+
+    let profileData = null;
+    if (venueData.owner_id) {
+      const { data } = await supabaseServer
+        .from('profiles')
+        .select('full_name, phone, whatsapp_number')
+        .eq('id', venueData.owner_id)
+        .maybeSingle();
+      profileData = data;
+    }
+
+    return { data: { ...venueData, profiles: profileData }, error: null };
+  } catch (error: any) {
+    return { data: null, error: error.message || 'Failed to load venue details' };
+  }
+}
+
+export async function fetchAdminLocationStats() {
+  try {
+    const admin = await requireAdminSession();
+    if (!admin.ok) return { data: [], error: admin.error };
+
+    const { data, error } = await supabaseServer
+      .from('venues')
+      .select('province')
+      .eq('status', 'approved');
+
+    if (error) return { data: [], error: error.message };
+
+    const provinceCounts: Record<string, number> = {};
+    (data || []).forEach((v) => {
+      if (v.province) provinceCounts[v.province] = (provinceCounts[v.province] || 0) + 1;
+    });
+
+    const locationData = Object.entries(provinceCounts)
+      .map(([province, count]) => ({ province, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    return { data: locationData, error: null };
+  } catch (error: any) {
+    return { data: [], error: error.message || 'Failed to load location stats' };
+  }
+}
+
+export async function fetchAdminVenueStatusCounts() {
+  try {
+    const admin = await requireAdminSession();
+    if (!admin.ok) return { total: 0, approved: 0, pending: 0, rejected: 0, error: admin.error };
+
+    const [totalRes, approvedRes, pendingRes, rejectedRes] = await Promise.all([
+      supabaseServer.from('venues').select('id', { count: 'exact', head: true }),
+      supabaseServer.from('venues').select('id', { count: 'exact', head: true }).eq('status', 'approved'),
+      supabaseServer.from('venues').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+      supabaseServer.from('venues').select('id', { count: 'exact', head: true }).eq('status', 'rejected'),
+    ]);
+
+    return {
+      total: totalRes.count || 0,
+      approved: approvedRes.count || 0,
+      pending: pendingRes.count || 0,
+      rejected: rejectedRes.count || 0,
+      error: null,
+    };
+  } catch (error: any) {
+    return { total: 0, approved: 0, pending: 0, rejected: 0, error: error.message };
+  }
+}
+
+export async function fetchAdminVenuesPaginated(params: {
+  offset: number;
+  limit: number;
+  searchQuery?: string;
+  statusFilter?: string;
+  provinceFilter?: string;
+  cityFilter?: string;
+  sportFilter?: string;
+}) {
+  try {
+    const admin = await requireAdminSession();
+    if (!admin.ok) return { data: [], count: 0, error: admin.error };
+
+    let query = supabaseServer
+      .from('venues')
+      .select(
+        'id, name, slug, city, province, sport_type, status, featured, owner_id, created_at',
+        { count: 'exact' }
+      );
+
+    if (params.searchQuery) {
+      query = query.or(
+        `name.ilike.%${params.searchQuery}%,city.ilike.%${params.searchQuery}%`
+      );
+    }
+    if (params.statusFilter && params.statusFilter !== 'all') {
+      query = query.eq('status', params.statusFilter as 'approved' | 'pending' | 'rejected');
+    }
+    if (params.provinceFilter) query = query.eq('province', params.provinceFilter);
+    if (params.cityFilter) query = query.eq('city', params.cityFilter);
+    if (params.sportFilter && params.sportFilter !== 'all') {
+      query = query.eq('sport_type', params.sportFilter as 'cricket' | 'football' | 'futsal' | 'pickleball' | 'badminton' | 'padel');
+    }
+
+    const { data: venuesData, error, count } = await query
+      .order('featured', { ascending: false })
+      .order('created_at', { ascending: false })
+      .range(params.offset, params.offset + params.limit - 1);
+
+    if (error) return { data: [], count: 0, error: error.message };
+    if (!venuesData || venuesData.length === 0) return { data: [], count: count || 0, error: null };
+
+    const venueIds = venuesData.map((v) => v.id);
+    const ownerIds = [...new Set(venuesData.map((v) => v.owner_id).filter((id): id is string => id !== null))];
+
+    const [profilesResult, photosResult] = await Promise.all([
+      ownerIds.length > 0
+        ? supabaseServer.from('profiles').select('id, full_name, phone').in('id', ownerIds)
+        : Promise.resolve({ data: [], error: null }),
+      supabaseServer
+        .from('venue_photos')
+        .select('id, venue_id, photo_url, display_order')
+        .in('venue_id', venueIds)
+        .order('display_order', { ascending: true }),
+    ]);
+
+    const profilesMap = new Map((profilesResult.data || []).map((p) => [p.id, p]));
+    const photosMap = new Map<string, Array<{ id: string; venue_id: string; photo_url: string; display_order: number }>>();
+    (photosResult.data || []).forEach((photo) => {
+      if (!photosMap.has(photo.venue_id)) photosMap.set(photo.venue_id, []);
+      const photos = photosMap.get(photo.venue_id)!;
+      if (photos.length < 4) photos.push(photo);
+    });
+
+    const data = venuesData.map((venue) => ({
+      ...venue,
+      profiles: venue.owner_id ? profilesMap.get(venue.owner_id) : null,
+      venue_photos: photosMap.get(venue.id) || [],
+    }));
+
+    return { data, count: count || 0, error: null };
+  } catch (error: any) {
+    return { data: [], count: 0, error: error.message || 'Failed to load venues' };
+  }
+}
+
+export async function fetchAdminContacts() {
+  try {
+    const admin = await requireAdminSession();
+    if (!admin.ok) return { data: [], error: admin.error };
+
+    const { data, error } = await supabaseServer
+      .from('contact_submissions')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) return { data: [], error: error.message };
+    return { data: data || [], error: null };
+  } catch (error: any) {
+    return { data: [], error: error.message || 'Failed to load contacts' };
+  }
+}
+
+export async function updateAdminContactSubmission(
+  contactId: string,
+  status: 'new' | 'in_progress' | 'resolved' | 'archived',
+  adminNotes: string
+) {
+  try {
+    const admin = await requireAdminSession();
+    if (!admin.ok) return { success: false, error: admin.error };
+
+    const { error } = await supabaseServer
+      .from('contact_submissions')
+      .update({ status, admin_notes: adminNotes })
+      .eq('id', contactId);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true, error: null };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to update contact' };
+  }
+}
+
+export async function fetchAdminReviewReports(filterStatus: string) {
+  try {
+    const admin = await requireAdminSession();
+    if (!admin.ok) return { data: [], error: admin.error };
+
+    let query = supabaseServer
+      .from('review_reports')
+      .select(`
+        *,
+        venue:venues(name, slug),
+        review:venue_reviews(customer_name, review_text, rating, photo_urls),
+        reporter:profiles!review_reports_reporter_id_fkey(full_name)
+      `)
+      .order('created_at', { ascending: false });
+
+    if (filterStatus !== 'all') {
+      query = query.eq('status', filterStatus as 'approved' | 'pending' | 'rejected');
+    }
+
+    const { data, error } = await query;
+    if (error) return { data: [], error: error.message };
+    return { data: data || [], error: null };
+  } catch (error: any) {
+    return { data: [], error: error.message || 'Failed to fetch reports' };
+  }
+}
+
+export async function resolveAdminReviewReport(
+  reportId: string,
+  action: 'approved' | 'rejected',
+  reviewId: string
+) {
+  try {
+    const admin = await requireAdminSession();
+    if (!admin.ok) return { success: false, error: admin.error };
+
+    const { error: updateError } = await supabaseServer
+      .from('review_reports')
+      .update({
+        status: action,
+        reviewed_at: new Date().toISOString(),
+        reviewed_by: admin.userId,
+      })
+      .eq('id', reportId);
+
+    if (updateError) return { success: false, error: updateError.message };
+
+    if (action === 'approved') {
+      const { error: deleteError } = await supabaseServer
+        .from('venue_reviews')
+        .delete()
+        .eq('id', reviewId);
+
+      if (deleteError) return { success: false, error: deleteError.message };
+    }
+
+    return { success: true, error: null };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to process report' };
+  }
+}
+
+export async function fetchAdminNotifications() {
+  try {
+    const admin = await requireAdminSession();
+    if (!admin.ok) return { data: [], error: admin.error };
+
+    const last7Days = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const [newUsersResult, pendingVenuesResult] = await Promise.all([
+      supabaseServer
+        .from('profiles')
+        .select('id, full_name, created_at')
+        .eq('role', 'venue_owner')
+        .gte('created_at', last7Days)
+        .order('created_at', { ascending: false }),
+      supabaseServer
+        .from('venues')
+        .select('id, name, created_at, profiles(full_name)')
+        .eq('status', 'pending')
+        .gte('created_at', last7Days)
+        .order('created_at', { ascending: false }),
+    ]);
+
+    const notifications: Array<{
+      id: string;
+      type: 'user_signup' | 'venue_request';
+      title: string;
+      message: string;
+      created_at: string;
+      data?: unknown;
+    }> = [];
+
+    (newUsersResult.data || []).forEach((user) => {
+      notifications.push({
+        id: `user-${user.id}`,
+        type: 'user_signup',
+        title: 'New User Signup',
+        message: `${user.full_name || 'New user'} signed up`,
+        created_at: user.created_at,
+        data: user,
+      });
+    });
+
+    (pendingVenuesResult.data || []).forEach((venue: any) => {
+      notifications.push({
+        id: `venue-${venue.id}`,
+        type: 'venue_request',
+        title: 'New Venue Request',
+        message: `${venue.profiles?.full_name || 'Unknown'} submitted "${venue.name}" for approval`,
+        created_at: venue.created_at,
+        data: venue,
+      });
+    });
+
+    notifications.sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+
+    return { data: notifications, error: null };
+  } catch (error: any) {
+    return { data: [], error: error.message || 'Failed to load notifications' };
+  }
+}
+
+export async function fetchAdminUsersWithVenueCounts() {
+  try {
+    const admin = await requireAdminSession();
+    if (!admin.ok) return { data: [], error: admin.error };
+
+    const { data: profilesData, error } = await supabaseServer
+      .from('profiles')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) return { data: [], error: error.message };
+
+    const usersWithVenues = await Promise.all(
+      (profilesData || []).map(async (profile) => {
+        const { data: venues } = await supabaseServer
+          .from('venues')
+          .select('id, status')
+          .eq('owner_id', profile.id);
+
+        return {
+          ...profile,
+          venue_count: venues?.length || 0,
+          approved_venues: venues?.filter((v) => v.status === 'approved').length || 0,
+        };
+      })
+    );
+
+    return { data: usersWithVenues, error: null };
+  } catch (error: any) {
+    return { data: [], error: error.message || 'Failed to load users' };
+  }
+}
+
+export async function fetchAdminAnalyticsPage() {
+  try {
+    const admin = await requireAdminSession();
+    if (!admin.ok) return { data: null, error: admin.error };
+
+    const firstDayOfMonth = new Date(
+      new Date().getFullYear(),
+      new Date().getMonth(),
+      1
+    ).toISOString();
+
+    const [venuesResult, usersResult, bookingsResult] = await Promise.all([
+      supabaseServer.from('venues').select('*'),
+      supabaseServer.from('profiles').select('*'),
+      supabaseServer.from('bookings').select('*'),
+    ]);
+
+    const venues = venuesResult.data || [];
+    const users = usersResult.data || [];
+    const bookings = bookingsResult.data || [];
+
+    const totalVenues = venues.length;
+    const totalUsers = users.filter((u) => u.role !== 'admin').length;
+    const totalBookings = bookings.length;
+    const totalRevenue = bookings
+      .filter((b) => b.status === 'confirmed' || b.status === 'completed')
+      .reduce((sum, b) => sum + (b.total_price || 0), 0);
+
+    const venuesThisMonth = venues.filter((v) => v.created_at >= firstDayOfMonth).length;
+    const usersThisMonth = users.filter(
+      (u) => u.created_at >= firstDayOfMonth && u.role !== 'admin'
+    ).length;
+    const bookingsThisMonth = bookings.filter((b) => b.created_at >= firstDayOfMonth).length;
+    const revenueThisMonth = bookings
+      .filter(
+        (b) =>
+          (b.status === 'confirmed' || b.status === 'completed') &&
+          b.created_at >= firstDayOfMonth
+      )
+      .reduce((sum, b) => sum + (b.total_price || 0), 0);
+
+    const sportCounts: Record<string, number> = {};
+    venues.forEach((v) => {
+      sportCounts[v.sport_type] = (sportCounts[v.sport_type] || 0) + 1;
+    });
+    const venuesBySport = Object.entries(sportCounts)
+      .map(([sport, count]) => ({ sport, count }))
+      .sort((a, b) => b.count - a.count);
+
+    const cityCounts: Record<string, number> = {};
+    venues.forEach((v) => {
+      cityCounts[v.city] = (cityCounts[v.city] || 0) + 1;
+    });
+    const venuesByCity = Object.entries(cityCounts)
+      .map(([city, count]) => ({ city, count }))
+      .sort((a, b) => b.count - a.count);
+
+    return {
+      data: {
+        totalVenues,
+        totalUsers,
+        totalBookings,
+        totalRevenue,
+        venuesBySport,
+        venuesByCity,
+        growthStats: {
+          venuesThisMonth,
+          usersThisMonth,
+          bookingsThisMonth,
+          revenueThisMonth,
+        },
+      },
+      error: null,
+    };
+  } catch (error: any) {
+    return { data: null, error: error.message || 'Failed to load analytics' };
+  }
+}

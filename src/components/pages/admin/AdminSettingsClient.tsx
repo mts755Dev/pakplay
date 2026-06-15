@@ -7,10 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/integrations/supabase/client";
+import { getAdminSession, fetchUserProfileById, updateUserPassword, updateUserProfile } from "@/lib/server-actions";
 import { Settings as SettingsIcon, Loader2, Save, User, Lock } from "lucide-react";
 import { toast } from "sonner";
-import { updateUserPassword, updateUserProfile } from "@/lib/server-actions";
 
 export function AdminSettingsClient() {
   const router = useRouter();
@@ -33,32 +32,33 @@ export function AdminSettingsClient() {
 
   const checkUser = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single();
-
-        if (profile?.role !== 'admin') {
+      const session = await getAdminSession();
+      if (!session.success || !session.user) {
+        if (session.error && session.error !== 'Not authenticated') {
           toast.error("Access denied. Admin only.");
           router.push('/');
           return;
         }
-
-        setUser(user);
-        setProfile(profile);
-        setFormData({
-          full_name: profile.full_name || '',
-          phone: profile.phone || '',
-          currentPassword: '',
-          newPassword: '',
-          confirmPassword: '',
-        });
-      } else {
         router.push('/admin');
+        return;
       }
+
+      const { profile: profileData, error } = await fetchUserProfileById(session.user.id);
+      if (error || !profileData || profileData.role !== 'admin') {
+        toast.error("Access denied. Admin only.");
+        router.push('/');
+        return;
+      }
+
+      setUser(session.user);
+      setProfile(profileData);
+      setFormData({
+        full_name: profileData.full_name || '',
+        phone: profileData.phone || '',
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+      });
     } finally {
       setAuthChecking(false);
       setLoading(false);

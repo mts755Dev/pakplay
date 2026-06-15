@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchUserProfileById } from '@/lib/server-actions';
 import { signOutClient } from '@/lib/sign-out';
 
 interface AuthContextType {
@@ -69,11 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (session?.user) {
           setUser(session.user);
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('role, full_name, phone, whatsapp_number')
-            .eq('id', session.user.id)
-            .single();
+          const { profile } = await fetchUserProfileById(session.user.id);
 
           if (!isMounted) return;
 
@@ -113,11 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         if (session?.user) {
           setUser(session.user);
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('role, full_name, phone, whatsapp_number')
-            .eq('id', session.user.id)
-            .single();
+          const { profile } = await fetchUserProfileById(session.user.id);
 
           if (!isMounted) return;
 

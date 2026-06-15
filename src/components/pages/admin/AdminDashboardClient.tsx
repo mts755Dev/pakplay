@@ -5,7 +5,14 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  getAdminSession,
+  fetchAdminPendingVenues,
+  fetchAdminVenueDetail,
+  fetchAdminLocationStats,
+  fetchAdminDashboard,
+  updateAdminVenueStatus,
+} from "@/lib/server-actions";
 import { Building2, Calendar, Users, CheckCircle, XCircle, Eye, Loader2, MapPin, X, DollarSign, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -41,29 +48,22 @@ export function AdminDashboardClient({ initialStats }: AdminDashboardClientProps
 
   const checkUser = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        // Check if user is admin
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single();
-
-        if (profile?.role !== 'admin') {
+      const session = await getAdminSession();
+      if (!session.success || !session.user) {
+        if (session.error && session.error !== 'Not authenticated') {
           toast.error("Access denied. Admin only.");
           window.location.href = "/";
           return;
         }
+        window.location.href = "/admin";
+        return;
+      }
 
-      setUser(user);
+      setUser(session.user);
       if (!initialStats) {
         fetchPendingVenues();
         fetchStats();
         fetchLocationStats();
-      }
-      } else {
-        window.location.href = "/admin";
       }
     } finally {
       setAuthChecking(false);
@@ -72,60 +72,14 @@ export function AdminDashboardClient({ initialStats }: AdminDashboardClientProps
 
   const fetchPendingVenues = async () => {
     try {
-      // Fetch venues first
-      const { data: venuesData, error: venuesError } = await supabase
-        .from('venues')
-        .select('*')
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false });
-
-      if (venuesError) {
-        toast.error("Failed to load pending venues");
+      const { data, error } = await fetchAdminPendingVenues();
+      if (error) {
+        toast.error(error || "Failed to load pending venues");
         setPendingVenues([]);
-        setLoading(false);
         return;
       }
-
-      // Get venue IDs for batch queries
-      const venueIds = (venuesData || []).map(v => v.id);
-      const ownerIds = (venuesData || []).map(v => v.owner_id).filter((id): id is string => id !== null);
-
-      // Batch fetch profiles and first 4 photos per venue
-      const [profilesData, photosData] = await Promise.all([
-        ownerIds.length > 0 ? supabase
-            .from('profiles')
-          .select('id, full_name, phone, whatsapp_number')
-          .in('id', ownerIds) : Promise.resolve({ data: [], error: null }),
-        supabase
-          .from('venue_photos')
-          .select('*')
-          .in('venue_id', venueIds)
-          .order('display_order', { ascending: true })
-      ]);
-
-      // Create lookup maps
-      const profilesMap = new Map();
-      (profilesData.data || []).forEach(profile => {
-        profilesMap.set(profile.id, profile);
-      });
-
-      const photosMap = new Map();
-      (photosData.data || []).forEach(photo => {
-        if (!photosMap.has(photo.venue_id)) {
-          photosMap.set(photo.venue_id, []);
-        }
-        photosMap.get(photo.venue_id).push(photo);
-      });
-
-      // Combine data
-      const venuesWithData = (venuesData || []).map(venue => ({
-            ...venue,
-        profiles: profilesMap.get(venue.owner_id),
-        venue_photos: photosMap.get(venue.id) || []
-      }));
-
-      setPendingVenues(venuesWithData);
-    } catch (error) {
+      setPendingVenues(data);
+    } catch {
       toast.error("Failed to load pending venues");
       setPendingVenues([]);
     } finally {
@@ -135,70 +89,46 @@ export function AdminDashboardClient({ initialStats }: AdminDashboardClientProps
 
   const fetchStats = async () => {
     try {
-      const [venueData, userData] = await Promise.all([
-        supabase.from('venues').select('status'),
-        supabase.from('profiles').select('id, role'),
-      ]);
-
-      if (venueData.data) {
-        const approved = venueData.data.filter(v => v.status === 'approved').length;
-        const pending = venueData.data.filter(v => v.status === 'pending').length;
-
-        // Count only non-admin users
-        const nonAdminUsers = userData.data?.filter(u => u.role !== 'admin').length || 0;
-
-        setStats({
-          totalVenues: venueData.data.length,
-          approvedVenues: approved,
-          pendingVenues: pending,
-          totalUsers: nonAdminUsers,
-        });
-      }
-    } catch (error) {
+      const dashboard = await fetchAdminDashboard();
+      setStats({
+        totalVenues: dashboard.totalVenues,
+        approvedVenues: dashboard.approvedVenues,
+        pendingVenues: dashboard.pendingVenues,
+        totalUsers: dashboard.totalUsers,
+        totalBookings: dashboard.totalBookings,
+        totalRevenue: dashboard.totalRevenue,
+      });
+    } catch {
+      toast.error("Failed to load dashboard stats");
     }
   };
 
   const fetchLocationStats = async () => {
     try {
-      const { data: venues } = await supabase
-        .from('venues')
-        .select('province, city')
-        .eq('status', 'approved');
-
-      if (venues) {
-        // Count by province
-        const provinceCounts: Record<string, number> = {};
-        venues.forEach(v => {
-          if (v.province) {
-            provinceCounts[v.province] = (provinceCounts[v.province] || 0) + 1;
-          }
-        });
-
-        const provinces = getAllProvinces();
-        const locationData = Object.entries(provinceCounts)
-          .map(([provinceId, count]) => ({
-            province: provinceId,
-            count,
-            provinceName: provinces.find(p => p.id === provinceId)?.name || provinceId
-          }))
-          .sort((a, b) => b.count - a.count)
-          .slice(0, 5); // Top 5 provinces
-
-        setLocationStats(locationData);
+      const { data, error } = await fetchAdminLocationStats();
+      if (error) {
+        toast.error(error || "Failed to load location stats");
+        return;
       }
-    } catch (error) {
+
+      const provinces = getAllProvinces();
+      const locationData = data.map((stat) => ({
+        province: stat.province,
+        count: stat.count,
+        provinceName: provinces.find((p) => p.id === stat.province)?.name || stat.province,
+      }));
+
+      setLocationStats(locationData);
+    } catch {
+      toast.error("Failed to load location stats");
     }
   };
 
   const handleApprove = async (venueId: string) => {
     setActionLoading(venueId);
     try {
-      const { error } = await supabase
-        .from('venues')
-        .update({ status: 'approved' })
-        .eq('id', venueId);
-
-      if (error) throw error;
+      const result = await updateAdminVenueStatus(venueId, 'approved');
+      if (!result.success) throw new Error(result.error);
 
       toast.success("Venue approved successfully!");
       fetchPendingVenues();
@@ -213,12 +143,8 @@ export function AdminDashboardClient({ initialStats }: AdminDashboardClientProps
   const handleReject = async (venueId: string) => {
     setActionLoading(venueId);
     try {
-      const { error } = await supabase
-        .from('venues')
-        .update({ status: 'rejected' })
-        .eq('id', venueId);
-
-      if (error) throw error;
+      const result = await updateAdminVenueStatus(venueId, 'rejected');
+      if (!result.success) throw new Error(result.error);
 
       toast.success("Venue rejected");
       fetchPendingVenues();
@@ -236,37 +162,13 @@ export function AdminDashboardClient({ initialStats }: AdminDashboardClientProps
   const handleViewDetails = async (venueId: string) => {
     setVenueLoading(true);
     setIsDetailModalOpen(true);
-    
+
     try {
-      const { data: venueData, error: venueError } = await supabase
-        .from('venues')
-        .select(`
-          *,
-          venue_photos(*),
-          venue_pricing_rules(*)
-        `)
-        .eq('id', venueId)
-        .single();
+      const { data, error } = await fetchAdminVenueDetail(venueId);
+      if (error || !data) throw new Error(error || "Venue not found");
 
-      if (venueError) throw venueError;
-
-      let profileData = null;
-      if (venueData.owner_id) {
-        const { data } = await supabase
-          .from('profiles')
-          .select('full_name, phone, whatsapp_number')
-          .eq('id', venueData.owner_id)
-          .single();
-        profileData = data;
-      }
-
-      const venueWithProfile = {
-        ...venueData,
-        profiles: profileData
-      };
-
-      setSelectedVenue(venueWithProfile);
-    } catch (error: any) {
+      setSelectedVenue(data);
+    } catch {
       toast.error("Failed to load venue details");
       setIsDetailModalOpen(false);
     } finally {

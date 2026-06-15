@@ -12,12 +12,13 @@ import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { Building, MapPin, DollarSign, Phone, Clock, Image, Upload, X, Loader2, Plus, Trash2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { LocationSelector } from "@/components/LocationSelector";
 import { formatFullLocation } from "@/lib/locationHelpers";
 import ppLogo from "@/assets/pp logo.png";
 import { useAuth } from "@/contexts/AuthContext";
 import { signOutClient } from "@/lib/sign-out";
+import { createOwnerVenueOnboarding } from "@/lib/server-actions";
+import { uploadOnboardingLogo, uploadOnboardingPhotos } from "@/lib/file-utils";
 
 export function OwnerOnboardingClient() {
   const router = useRouter();
@@ -187,66 +188,6 @@ export function OwnerOnboardingClient() {
     setPhotoPreivews(photoPreivews.filter((_, i) => i !== index));
   };
 
-  const uploadLogo = async (userId: string) => {
-    if (!logo) return null;
-
-    const fileExt = logo.name.split('.').pop();
-    const fileName = `${userId}/logo_${Date.now()}.${fileExt}`;
-
-    const { data, error } = await supabase.storage
-      .from('venue-logos')
-      .upload(fileName, logo);
-
-    if (error) {
-      return null;
-    }
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('venue-logos')
-      .getPublicUrl(fileName);
-
-    return publicUrl;
-  };
-
-  const uploadPhotos = async (venueId: string, userId: string) => {
-    const uploadedUrls: string[] = [];
-
-    // Upload files
-    for (let i = 0; i < photos.length; i++) {
-      const photo = photos[i];
-      const fileExt = photo.name.split('.').pop();
-      const fileName = `${userId}/${venueId}/${Date.now()}_${i}.${fileExt}`;
-
-      const { data, error } = await supabase.storage
-        .from('venue-photos')
-        .upload(fileName, photo);
-
-      if (error) {
-        continue;
-      }
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('venue-photos')
-        .getPublicUrl(fileName);
-
-      uploadedUrls.push(publicUrl);
-    }
-
-    // Add URL-based photos (no upload needed)
-    uploadedUrls.push(...photoUrls);
-
-    return uploadedUrls;
-  };
-
-  const generateSlug = (name: string) => {
-    return name
-      .toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, '')
-      .replace(/\s+/g, '-')
-      .replace(/-+/g, '-')
-      .trim();
-  };
-
   const handleSubmit = async () => {
     if (!user) {
       toast.error("Please sign in first");
@@ -263,125 +204,53 @@ export function OwnerOnboardingClient() {
     setUploading(true);
 
     try {
-      // Generate slug
-      const baseSlug = generateSlug(formData.venueName);
-      
-      // Use the database function to get unique slug (with fallback)
-      let slug = baseSlug;
-      try {
-        const { data: slugData, error: slugError } = await supabase
-          .rpc('generate_venue_slug', { venue_name: formData.venueName });
-        
-        if (!slugError && slugData) {
-          slug = slugData;
-        }
-      } catch (e) {
+      let logoUrl: string | null = null;
+      if (logo) {
+        const logoResult = await uploadOnboardingLogo(user.id, logo);
+        if (logoResult.error) throw new Error(logoResult.error);
+        logoUrl = logoResult.url;
       }
 
-      // Upload logo first
-      const logoUrl = await uploadLogo(user.id);
-
-      // Insert venue
-      const { data: venue, error: venueError } = await supabase
-        .from('venues')
-        .insert({
-          owner_id: user.id,
-          name: formData.venueName,
-          slug: slug,
-          sport_type: formData.sport as 'cricket' | 'football' | 'futsal' | 'pickleball' | 'badminton' | 'padel',
-          province: formData.province || null,
-          city: formData.city,
-          area: formData.area || null,
-          sub_area: formData.subArea || null,
-          address: formData.address,
-          description: formData.description,
-          amenities: formData.amenities.length > 0 ? formData.amenities : null,
-          price_per_hour: parseFloat(formData.pricePerHour),
-          number_of_courts: parseInt(formData.numberOfCourts, 10),
-          opening_time: formData.is24_7 ? null : formData.openingTime,
-          closing_time: formData.is24_7 ? null : formData.closingTime,
-          is_24_7: formData.is24_7,
-          whatsapp_number: formData.phone,
-          status: 'pending' as 'pending' | 'approved' | 'rejected' | 'inactive',
-          // Customization fields
-          logo_url: logoUrl,
-          tagline: formData.tagline || null,
-          facebook_url: formData.facebookUrl || null,
-          instagram_url: formData.instagramUrl || null,
-          google_maps_url: formData.googleMapsUrl || null,
-        })
-        .select()
-        .single();
-
-      if (venueError) throw venueError;
-
-      // Upload photos
-      const photoUrls = await uploadPhotos(venue.id, user.id);
-
-      // Insert venue photos
-      if (photoUrls.length > 0) {
-        const photoInserts = photoUrls.map((url, index) => ({
-          venue_id: venue.id,
-          photo_url: url,
-          is_primary: index === 0,
-          display_order: index,
-        }));
-
-        const { error: photoError } = await supabase
-          .from('venue_photos')
-          .insert(photoInserts);
-
-        if (photoError) {
-        }
+      let uploadedPhotoUrls: string[] = [...photoUrls];
+      if (photos.length > 0) {
+        const photosResult = await uploadOnboardingPhotos(user.id, photos);
+        if (photosResult.error) throw new Error(photosResult.error);
+        uploadedPhotoUrls = [...uploadedPhotoUrls, ...photosResult.urls];
       }
 
-      // Insert pricing rules if any
-      if (pricingRules.length > 0) {
-        const pricingInserts: any[] = [];
-        
-        pricingRules.forEach((rule, index) => {
-          if (rule.daysOfWeek.length === 0) {
-            // Apply to all days
-            pricingInserts.push({
-              venue_id: venue.id,
-              day_of_week: null,
-              start_time: rule.startTime || null,
-              end_time: rule.endTime || null,
-              price_per_hour: parseFloat(rule.price),
-              priority: index,
-            });
-          } else {
-            // Create separate rule for each selected day
-            rule.daysOfWeek.forEach(day => {
-              pricingInserts.push({
-                venue_id: venue.id,
-                day_of_week: parseInt(day),
-                start_time: rule.startTime || null,
-                end_time: rule.endTime || null,
-                price_per_hour: parseFloat(rule.price),
-                priority: index,
-              });
-            });
-          }
-        });
+      const result = await createOwnerVenueOnboarding({
+        userId: user.id,
+        venueName: formData.venueName,
+        sport: formData.sport as 'cricket' | 'football' | 'futsal' | 'pickleball' | 'badminton' | 'padel',
+        province: formData.province || null,
+        city: formData.city,
+        area: formData.area || null,
+        subArea: formData.subArea || null,
+        address: formData.address,
+        description: formData.description,
+        amenities: formData.amenities.length > 0 ? formData.amenities : null,
+        pricePerHour: parseFloat(formData.pricePerHour),
+        numberOfCourts: parseInt(formData.numberOfCourts, 10),
+        openingTime: formData.is24_7 ? null : formData.openingTime,
+        closingTime: formData.is24_7 ? null : formData.closingTime,
+        is24_7: formData.is24_7,
+        phone: formData.phone,
+        logoUrl,
+        tagline: formData.tagline || null,
+        facebookUrl: formData.facebookUrl || null,
+        instagramUrl: formData.instagramUrl || null,
+        googleMapsUrl: formData.googleMapsUrl || null,
+        photoUrls: uploadedPhotoUrls,
+        pricingRules,
+      });
 
-        if (pricingInserts.length > 0) {
-          const { error: pricingError } = await supabase
-            .from('venue_pricing_rules')
-            .insert(pricingInserts);
-
-          if (pricingError) {
-          }
-        }
-      }
+      if (!result.success) throw new Error(result.error || 'Failed to submit venue');
 
       toast.success("Venue submitted for approval! We'll review it within 24 hours.");
-      
-      // Navigate to owner dashboard
+
       setTimeout(() => {
         router.push('/owner/dashboard');
       }, 2000);
-
     } catch (error: any) {
       toast.error(error.message || "Failed to submit venue");
     } finally {

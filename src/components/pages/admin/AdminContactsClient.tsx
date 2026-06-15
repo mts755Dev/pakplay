@@ -22,7 +22,11 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  getAdminSession,
+  fetchAdminContacts,
+  updateAdminContactSubmission,
+} from "@/lib/server-actions";
 import { useToast } from "@/hooks/use-toast";
 import { Mail, Phone, Calendar, Loader2 } from "lucide-react";
 import { Tables } from "@/integrations/supabase/types";
@@ -61,29 +65,23 @@ export function AdminContactsClient() {
 
   const checkUser = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single();
-
-        if (profile?.role !== 'admin') {
+      const session = await getAdminSession();
+      if (!session.success || !session.user) {
+        if (session.error && session.error !== 'Not authenticated') {
           toast({
             title: "Access Denied",
             description: "Admin credentials required.",
-            variant: "destructive"
+            variant: "destructive",
           });
           window.location.href = "/";
           return;
         }
-
-        setUser(user);
-        fetchContacts();
-      } else {
         window.location.href = "/admin";
+        return;
       }
+
+      setUser(session.user);
+      fetchContacts();
     } finally {
       setAuthChecking(false);
     }
@@ -91,18 +89,14 @@ export function AdminContactsClient() {
 
   const fetchContacts = async () => {
     try {
-      const { data, error } = await supabase
-        .from('contact_submissions')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setContacts(data || []);
-    } catch (error) {
+      const { data, error } = await fetchAdminContacts();
+      if (error) throw new Error(error);
+      setContacts(data);
+    } catch {
       toast({
         title: "Error",
         description: "Failed to load contact submissions",
-        variant: "destructive"
+        variant: "destructive",
       });
     } finally {
       setLoading(false);
@@ -120,28 +114,25 @@ export function AdminContactsClient() {
     if (!selectedContact) return;
 
     try {
-      const { error } = await supabase
-        .from('contact_submissions')
-        .update({
-          status: selectedStatus,
-          admin_notes: adminNotes
-        })
-        .eq('id', selectedContact.id);
-
-      if (error) throw error;
+      const result = await updateAdminContactSubmission(
+        selectedContact.id,
+        selectedStatus,
+        adminNotes
+      );
+      if (!result.success) throw new Error(result.error);
 
       toast({
         title: "Success",
-        description: "Contact submission updated successfully"
+        description: "Contact submission updated successfully",
       });
 
       setDialogOpen(false);
       fetchContacts();
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to update contact submission",
-        variant: "destructive"
+        variant: "destructive",
       });
     }
   };

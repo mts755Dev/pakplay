@@ -15,7 +15,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Edit, Trash2, Building2, DollarSign, Calendar, Eye, Upload, X, Clock, Phone, MapPin, Building, Loader2, LayoutGrid } from "lucide-react";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { LocationSelector } from "@/components/LocationSelector";
 import { uploadVenueLogo, uploadVenuePhotos } from "@/lib/file-utils";
@@ -24,6 +23,9 @@ import {
   fetchVenueLoyaltyTiers,
   fetchVenueReviewsForOwner,
   updateOwnerVenue,
+  fetchOwnerVenuesList,
+  deleteOwnerVenue,
+  reportOwnerReview,
 } from "@/lib/server-actions";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -141,13 +143,9 @@ export function OwnerVenuesClient({ initialVenues, userId }: OwnerVenuesClientPr
   const fetchVenues = async (userId: string) => {
     // Refetch venues after update/delete
     try {
-      const { data, error } = await supabase
-        .from('venues')
-        .select('*, venue_photos(*)')
-        .eq('owner_id', userId)
-        .order('created_at', { ascending: false });
+      const { data, error } = await fetchOwnerVenuesList(userId);
 
-      if (error) throw error;
+      if (error) throw new Error(error);
       setVenues(data || []);
     } catch (error) {
       toast.error("Failed to load venues");
@@ -279,16 +277,14 @@ export function OwnerVenuesClient({ initialVenues, userId }: OwnerVenuesClientPr
 
     setSubmittingReport(true);
     try {
-      const { error } = await supabase
-        .from('review_reports')
-        .insert({
-          review_id: reportingReview.id,
-          venue_id: viewingReviewsVenue.id,
-          reporter_id: userId,
-          reason: reportReason,
-        });
+      const result = await reportOwnerReview({
+        userId,
+        reviewId: reportingReview.id,
+        venueId: viewingReviewsVenue.id,
+        reason: reportReason,
+      });
 
-      if (error) throw error;
+      if (!result.success) throw new Error(result.error || 'Failed to submit report');
 
       // Add to report statuses
       setReportStatuses(prev => new Map(prev).set(reportingReview.id, 'pending'));
@@ -440,12 +436,8 @@ export function OwnerVenuesClient({ initialVenues, userId }: OwnerVenuesClientPr
     if (!deletingVenueId) return;
 
     try {
-      const { error } = await supabase
-        .from('venues')
-        .delete()
-        .eq('id', deletingVenueId);
-
-      if (error) throw error;
+      const result = await deleteOwnerVenue(userId, deletingVenueId);
+      if (!result.success) throw new Error(result.error || 'Failed to delete venue');
 
       toast.success("Venue deleted successfully");
       setDeletingVenueId(null);

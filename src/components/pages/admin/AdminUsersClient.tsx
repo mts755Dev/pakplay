@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { getAdminSession, fetchAdminUsersWithVenueCounts } from "@/lib/server-actions";
 import { Users as UsersIcon, Search, Loader2, Phone, Building2, Calendar } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -35,26 +35,20 @@ export function AdminUsersClient({ initialUsers }: AdminUsersClientProps = {}) {
 
   const checkUser = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single();
-
-        if (profile?.role !== 'admin') {
+      const session = await getAdminSession();
+      if (!session.success || !session.user) {
+        if (session.error && session.error !== 'Not authenticated') {
           toast.error("Access denied. Admin only.");
           router.push('/');
           return;
         }
-
-        setUser(user);
-        if (!initialUsers) {
-          fetchUsers();
-        }
-      } else {
         router.push('/admin');
+        return;
+      }
+
+      setUser(session.user);
+      if (!initialUsers) {
+        fetchUsers();
       }
     } finally {
       setAuthChecking(false);
@@ -63,31 +57,10 @@ export function AdminUsersClient({ initialUsers }: AdminUsersClientProps = {}) {
 
   const fetchUsers = async () => {
     try {
-      const { data: profilesData, error: profilesError } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (profilesError) throw profilesError;
-
-      // Fetch venue counts for each user
-      const usersWithVenues = await Promise.all(
-        (profilesData || []).map(async (profile) => {
-          const { data: venues } = await supabase
-            .from('venues')
-            .select('id, status')
-            .eq('owner_id', profile.id);
-          
-          return {
-            ...profile,
-            venue_count: venues?.length || 0,
-            approved_venues: venues?.filter(v => v.status === 'approved').length || 0
-          };
-        })
-      );
-
-      setUsers(usersWithVenues);
-    } catch (error) {
+      const { data, error } = await fetchAdminUsersWithVenueCounts();
+      if (error) throw new Error(error);
+      setUsers(data);
+    } catch {
       toast.error("Failed to load users");
     } finally {
       setLoading(false);

@@ -8,7 +8,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { signInUser } from "@/lib/server-actions";
 import { clearAuthSession } from "@/lib/sign-out";
 import { Loader2, Shield, ArrowLeft } from "lucide-react";
 import ppLogo from "@/assets/pp logo.png";
@@ -31,33 +31,17 @@ export function AdminLoginClient() {
     setLoading(true);
 
     try {
-      // Sign in
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const result = await signInUser({ email, password, mode: 'admin' });
 
-      if (error) throw error;
-
-      if (data.user) {
-        // Check if user is admin
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', data.user.id)
-          .single();
-
-        if (profileError) throw profileError;
-
-        if (profile?.role !== 'admin') {
+      if (!result.success) {
+        if (result.error?.includes('Access denied')) {
           clearAuthSession();
-          toast.error("Access denied. Admin credentials required.");
-          return;
         }
-
-        toast.success("Welcome back, Admin!");
-        router.push('/admin/dashboard');
+        throw new Error(result.error || 'Invalid credentials');
       }
+
+      toast.success("Welcome back, Admin!");
+      router.push('/admin/dashboard');
     } catch (error: any) {
       toast.error(error.message || "Invalid credentials");
     } finally {

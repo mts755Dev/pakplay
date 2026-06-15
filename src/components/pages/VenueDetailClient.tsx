@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import { MapPin, Clock, Phone, Loader2, Star, CheckCircle, Wifi, Car, Droplets, Wind, Zap, Shield, Award, X, Image as ImageIcon, ArrowRight, Globe, Facebook, Instagram, Twitter, Play, TrendingUp, Users, Menu } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { fetchVenueBySlug, fetchVenueBySubdomain } from "@/lib/server-actions";
 import { Tables } from "@/integrations/supabase/types";
 import { SpecialOfferBadge } from "@/components/SpecialOfferBadge";
 import { Turnstile } from "@marsidev/react-turnstile";
@@ -172,7 +172,7 @@ export function VenueDetailClient({
     
     if (subdomain) {
       // Fetch by subdomain
-      fetchVenueBySubdomain(subdomain);
+      fetchVenueBySubdomainClient(subdomain);
     } else if (slug) {
       // Fetch by slug (normal route)
       fetchVenue();
@@ -303,49 +303,17 @@ export function VenueDetailClient({
 
   const fetchVenue = async () => {
     try {
-      const { data, error } = await supabase
-        .from('venues')
-        .select(`
-          *,
-          venue_photos (*)
-        `)
-        .eq('slug', slug)
-        .eq('status', 'approved')
-        .single();
+      const data = await fetchVenueBySlug(slug);
 
-      if (error) throw error;
-      
       if (!data) {
         toast.error("Venue not found");
         return;
       }
 
-      data.venue_photos.sort((a, b) => a.display_order - b.display_order);
-      
-      // Fetch reviews and active offer in parallel
-      const [reviewsResult, offerResult] = await Promise.all([
-        supabase
-          .from('venue_reviews')
-          .select('*')
-          .eq('venue_id', data.id)
-          .order('date', { ascending: false }),
-        supabase
-          .from('special_offers')
-          .select('*')
-          .eq('venue_id', data.id)
-          .eq('is_active', true)
-          .lte('valid_from', new Date().toISOString())
-          .gte('valid_until', new Date().toISOString())
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-      ]);
-      
-      setReviews(reviewsResult.data || []);
-      setVenue({ ...data, reviews: reviewsResult.data || [] });
-      setActiveOffer(offerResult.data);
-      
-      // Set owner email from venue data if available (contact_email field)
+      setReviews(data.reviews || []);
+      setVenue({ ...data, reviews: data.reviews || [] });
+      setActiveOffer(data.active_offer || null);
+
       if ((data as any).contact_email) {
         setOwnerEmail((data as any).contact_email);
       }
@@ -356,51 +324,19 @@ export function VenueDetailClient({
     }
   };
 
-  const fetchVenueBySubdomain = async (subdomain: string) => {
+  const fetchVenueBySubdomainClient = async (subdomain: string) => {
     try {
-      const { data, error } = await supabase
-        .from('venues')
-        .select(`
-          *,
-          venue_photos (*)
-        `)
-        .eq('subdomain', subdomain)
-        .eq('status', 'approved')
-        .single();
+      const data = await fetchVenueBySubdomain(subdomain);
 
-      if (error) throw error;
-      
       if (!data) {
         toast.error("Venue not found");
         return;
       }
 
-      data.venue_photos.sort((a, b) => a.display_order - b.display_order);
-      
-      // Fetch reviews and active offer in parallel
-      const [reviewsResult, offerResult] = await Promise.all([
-        supabase
-          .from('venue_reviews')
-          .select('*')
-          .eq('venue_id', data.id)
-          .order('date', { ascending: false }),
-        supabase
-          .from('special_offers')
-          .select('*')
-          .eq('venue_id', data.id)
-          .eq('is_active', true)
-          .lte('valid_from', new Date().toISOString())
-          .gte('valid_until', new Date().toISOString())
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-      ]);
-      
-      setReviews(reviewsResult.data || []);
-      setVenue({ ...data, reviews: reviewsResult.data || [] });
-      setActiveOffer(offerResult.data);
-      
-      // Set owner email from venue data if available
+      setReviews(data.reviews || []);
+      setVenue({ ...data, reviews: data.reviews || [] });
+      setActiveOffer(data.active_offer || null);
+
       if ((data as any).contact_email) {
         setOwnerEmail((data as any).contact_email);
       }
@@ -413,20 +349,11 @@ export function VenueDetailClient({
 
   const fetchActiveOffer = async (venueId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('special_offers')
-        .select('*')
-        .eq('venue_id', venueId)
-        .eq('is_active', true)
-        .lte('valid_from', new Date().toISOString())
-        .gte('valid_until', new Date().toISOString())
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (error) throw error;
-      setActiveOffer(data);
-    } catch (error) {
+      const data = await fetchVenueBySlug(slug);
+      if (data?.id === venueId) {
+        setActiveOffer(data.active_offer || null);
+      }
+    } catch {
       // Silent fail for offers
     }
   };

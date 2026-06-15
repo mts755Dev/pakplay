@@ -4,7 +4,7 @@ import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { getAdminSession, fetchAdminNotifications } from "@/lib/server-actions";
 import { Bell, Loader2, UserPlus, Building2, Clock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -31,25 +31,19 @@ export function AdminNotificationsClient() {
 
   const checkUser = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single();
-
-        if (profile?.role !== 'admin') {
+      const session = await getAdminSession();
+      if (!session.success || !session.user) {
+        if (session.error && session.error !== 'Not authenticated') {
           toast.error("Access denied. Admin only.");
           router.push('/');
           return;
         }
-
-        setUser(user);
-        fetchNotifications();
-      } else {
         router.push('/admin');
+        return;
       }
+
+      setUser(session.user);
+      fetchNotifications();
     } finally {
       setAuthChecking(false);
     }
@@ -57,58 +51,10 @@ export function AdminNotificationsClient() {
 
   const fetchNotifications = async () => {
     try {
-      const now = new Date();
-      const last7Days = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
-
-      // Fetch new users (last 7 days)
-      const { data: newUsers } = await supabase
-        .from('profiles')
-        .select('id, full_name, created_at')
-        .eq('role', 'venue_owner')
-        .gte('created_at', last7Days)
-        .order('created_at', { ascending: false });
-
-      // Fetch pending venues (last 7 days)
-      const { data: pendingVenues } = await supabase
-        .from('venues')
-        .select('id, name, created_at, profiles(full_name)')
-        .eq('status', 'pending')
-        .gte('created_at', last7Days)
-        .order('created_at', { ascending: false });
-
-      const allNotifications: Notification[] = [];
-
-      // Add user signup notifications
-      newUsers?.forEach(user => {
-        allNotifications.push({
-          id: `user-${user.id}`,
-          type: 'user_signup',
-          title: 'New User Signup',
-          message: `${user.full_name || 'New user'} signed up`,
-          created_at: user.created_at,
-          data: user
-        });
-      });
-
-      // Add venue request notifications
-      pendingVenues?.forEach(venue => {
-        allNotifications.push({
-          id: `venue-${venue.id}`,
-          type: 'venue_request',
-          title: 'New Venue Request',
-          message: `${venue.profiles?.full_name || 'Unknown'} submitted "${venue.name}" for approval`,
-          created_at: venue.created_at,
-          data: venue
-        });
-      });
-
-      // Sort by date (newest first)
-      allNotifications.sort((a, b) => 
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
-
-      setNotifications(allNotifications);
-    } catch (error) {
+      const { data, error } = await fetchAdminNotifications();
+      if (error) throw new Error(error);
+      setNotifications(data);
+    } catch {
       toast.error("Failed to load notifications");
     } finally {
       setLoading(false);

@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Target, Users, Zap, Heart } from "lucide-react";
 import { StaticPageNav } from "@/components/shared/StaticPageNav";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { fetchAppStats } from "@/lib/server-actions";
 
 const values = [
   {
@@ -41,22 +41,11 @@ export function AboutUsPageContent({ initialStats }: AboutUsPageContentProps) {
   const { data: stats } = useQuery({
     queryKey: ['about-stats'],
     queryFn: async () => {
-      const [venuesResult, citiesResult] = await Promise.all([
-        supabase
-          .from('venues')
-          .select('id, city')
-          .eq('status', 'approved'),
-        supabase
-          .from('bookings')
-          .select('id')
-      ]);
-
-      const uniqueCities = new Set(venuesResult.data?.map(v => v.city) || []);
-      
+      const stats = await fetchAppStats();
       return {
-        totalVenues: venuesResult.data?.length || 0,
-        totalCities: uniqueCities.size || 0,
-        totalBookings: citiesResult.data?.length || 0,
+        totalVenues: stats.totalVenues || 0,
+        totalCities: stats.totalCities || 0,
+        totalBookings: stats.totalBookings || 0,
       };
     },
     initialData: initialStats,

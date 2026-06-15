@@ -2,7 +2,7 @@
 
 import { TrendingUp, MapPin, Users, Calendar } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { fetchAppStats } from "@/lib/server-actions";
 
 interface StatsSectionProps {
   initialStats?: any;
@@ -13,19 +13,12 @@ export const StatsSection = ({ initialStats }: StatsSectionProps) => {
   const { data: stats } = useQuery({
     queryKey: ['platform-stats'],
     queryFn: async () => {
-      const [venuesResult, bookingsResult, usersResult] = await Promise.all([
-        supabase.from('venues').select('id, city').eq('status', 'approved'),
-        supabase.from('bookings').select('id'),
-        supabase.from('profiles').select('id'),
-      ]);
-
-      const uniqueCities = new Set(venuesResult.data?.map(v => v.city) || []);
-
+      const stats = await fetchAppStats();
       return {
-        totalVenues: venuesResult.data?.length || 0,
-        totalBookings: bookingsResult.data?.length || 0,
-        totalUsers: usersResult.data?.length || 0,
-        totalCities: uniqueCities.size || 0,
+        totalVenues: stats.totalVenues || 0,
+        totalBookings: stats.totalBookings || 0,
+        totalUsers: stats.totalUsers || 0,
+        totalCities: stats.totalCities || 0,
       };
     },
     initialData: initialStats ? {

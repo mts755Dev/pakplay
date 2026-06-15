@@ -7,7 +7,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { MapPin, Clock, Star } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { fetchFeaturedVenues } from "@/lib/server-actions";
 import { Tables } from "@/integrations/supabase/types";
 
 type Venue = Tables<'venues'>;
@@ -42,52 +42,8 @@ export const VenuesShowcase = ({ initialVenues = [] }: VenuesShowcaseProps) => {
   const { data: venues, isLoading } = useQuery({
     queryKey: ['featured-venues'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('venues')
-        .select('*, venue_photos(*)')
-        .eq('status', 'approved')
-        .eq('featured', true)
-        .order('created_at', { ascending: false })
-        .limit(9);
-      
-      if (error) throw error;
-
-      // Fetch active offers and reviews for each venue
-      const venuesWithData = await Promise.all((data || []).map(async (venue) => {
-        // Fetch active offer
-        const { data: offer } = await supabase
-          .from('special_offers')
-          .select('*')
-          .eq('venue_id', venue.id)
-          .eq('is_active', true)
-          .lte('valid_from', new Date().toISOString())
-          .gte('valid_until', new Date().toISOString())
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        // Fetch reviews to calculate actual rating
-        const { data: reviews } = await supabase
-          .from('venue_reviews')
-          .select('rating')
-          .eq('venue_id', venue.id);
-
-        // Calculate average rating from reviews
-        const calculatedRating = reviews && reviews.length > 0
-          ? reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length
-          : 0;
-        
-        return { 
-          ...venue, 
-          active_offer: offer,
-          calculated_rating: calculatedRating,
-          review_count: reviews?.length || 0
-        };
-      }));
-
-      // Sort by calculated rating
-      venuesWithData.sort((a, b) => b.calculated_rating - a.calculated_rating);
-
+      const venuesWithData = await fetchFeaturedVenues(9);
+      venuesWithData.sort((a, b) => (b.calculated_rating || 0) - (a.calculated_rating || 0));
       return venuesWithData;
     },
     initialData: initialVenues,

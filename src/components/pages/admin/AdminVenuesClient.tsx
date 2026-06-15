@@ -10,7 +10,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useEffect, useState, useRef, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  getAdminSession,
+  fetchAdminVenueStatusCounts,
+  fetchAdminVenuesPaginated,
+  fetchAdminVenueDetail,
+  updateAdminVenueStatus,
+  setAdminVenueFeatured,
+} from "@/lib/server-actions";
 import { Building2, Search, Eye, CheckCircle, XCircle, Loader2, MapPin, Users, Filter } from "lucide-react";
 import { toast } from "sonner";
 import { LocationSelector } from "@/components/LocationSelector";
@@ -107,32 +114,25 @@ export function AdminVenuesClient({ initialVenues }: AdminVenuesClientProps = {}
 
   const checkUser = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single();
-
-        if (profile?.role !== 'admin') {
+      const session = await getAdminSession();
+      if (!session.success || !session.user) {
+        if (session.error && session.error !== 'Not authenticated') {
           toast.error("Access denied. Admin only.");
           window.location.href = '/';
           return;
         }
-
-        setUser(user);
-        
-        // Always fetch stats and initial venues
-        await Promise.all([
-          fetchStats(),
-          fetchVenues(0, true)
-        ]);
-        
-        isInitialized.current = true;
-      } else {
         window.location.href = '/admin';
+        return;
       }
+
+      setUser(session.user);
+
+      await Promise.all([
+        fetchStats(),
+        fetchVenues(0, true),
+      ]);
+
+      isInitialized.current = true;
     } finally {
       setAuthChecking(false);
     }
@@ -140,22 +140,19 @@ export function AdminVenuesClient({ initialVenues }: AdminVenuesClientProps = {}
 
   const fetchStats = async () => {
     try {
-      // Get counts for each status
-      const [totalRes, approvedRes, pendingRes, rejectedRes] = await Promise.all([
-        supabase.from('venues').select('id', { count: 'exact', head: true }),
-        supabase.from('venues').select('id', { count: 'exact', head: true }).eq('status', 'approved'),
-        supabase.from('venues').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-        supabase.from('venues').select('id', { count: 'exact', head: true }).eq('status', 'rejected'),
-      ]);
-
+      const result = await fetchAdminVenueStatusCounts();
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
       setStats({
-        total: totalRes.count || 0,
-        approved: approvedRes.count || 0,
-        pending: pendingRes.count || 0,
-        rejected: rejectedRes.count || 0,
+        total: result.total,
+        approved: result.approved,
+        pending: result.pending,
+        rejected: result.rejected,
       });
-    } catch (error) {
-      console.error('Error fetching stats:', error);
+    } catch {
+      toast.error("Failed to load venue stats");
     }
   };
 
@@ -167,54 +164,19 @@ export function AdminVenuesClient({ initialVenues }: AdminVenuesClientProps = {}
         setLoadingMore(true);
       }
 
-      // Build query with server-side filtering
-      let query = supabase
-        .from('venues')
-        .select(`
-          id,
-          name,
-          slug,
-          city,
-          province,
-          sport_type,
-          status,
-          featured,
-          owner_id,
-          created_at
-        `, { count: 'exact' });
+      const { data, count, error } = await fetchAdminVenuesPaginated({
+        offset: fetchOffset,
+        limit: VENUES_PER_PAGE,
+        searchQuery: debouncedSearchQuery || undefined,
+        statusFilter,
+        provinceFilter: provinceFilter || undefined,
+        cityFilter: cityFilter || undefined,
+        sportFilter,
+      });
 
-      // Apply filters
-      if (debouncedSearchQuery) {
-        query = query.or(`name.ilike.%${debouncedSearchQuery}%,city.ilike.%${debouncedSearchQuery}%`);
-      }
+      if (error) throw new Error(error);
 
-      if (statusFilter !== 'all') {
-        query = query.eq('status', statusFilter as 'approved' | 'pending' | 'rejected');
-      }
-
-      if (provinceFilter) {
-        query = query.eq('province', provinceFilter);
-      }
-
-      if (cityFilter) {
-        query = query.eq('city', cityFilter);
-      }
-
-      if (sportFilter !== 'all') {
-        query = query.eq('sport_type', sportFilter as 'cricket' | 'football' | 'futsal' | 'pickleball' | 'badminton' | 'padel');
-      }
-
-      // Sort: featured first, then by created_at
-      query = query
-        .order('featured', { ascending: false })
-        .order('created_at', { ascending: false })
-        .range(fetchOffset, fetchOffset + VENUES_PER_PAGE - 1);
-
-      const { data: venuesData, error, count } = await query;
-
-      if (error) throw error;
-
-      if (!venuesData || venuesData.length === 0) {
+      if (!data || data.length === 0) {
         if (isNewSearch) {
           setVenues([]);
           setTotalCount(count || 0);
@@ -223,61 +185,17 @@ export function AdminVenuesClient({ initialVenues }: AdminVenuesClientProps = {}
         return;
       }
 
-      // Get venue IDs and owner IDs for batch queries
-      const venueIds = venuesData.map(v => v.id);
-      const ownerIds = [...new Set(venuesData.map(v => v.owner_id).filter((id): id is string => id !== null))];
-
-      // Batch fetch profiles and first 4 photos per venue
-      const [profilesData, photosData] = await Promise.all([
-        ownerIds.length > 0 ? supabase
-          .from('profiles')
-          .select('id, full_name, phone')
-          .in('id', ownerIds) : Promise.resolve({ data: [], error: null }),
-        supabase
-          .from('venue_photos')
-          .select('id, venue_id, photo_url, display_order')
-          .in('venue_id', venueIds)
-          .order('display_order', { ascending: true })
-      ]);
-
-      // Create lookup maps
-      const profilesMap = new Map();
-      (profilesData.data || []).forEach(profile => {
-        profilesMap.set(profile.id, profile);
-      });
-
-      // Only keep first 4 photos per venue
-      const photosMap = new Map();
-      (photosData.data || []).forEach(photo => {
-        if (!photosMap.has(photo.venue_id)) {
-          photosMap.set(photo.venue_id, []);
-        }
-        const photos = photosMap.get(photo.venue_id);
-        if (photos.length < 4) {
-          photos.push(photo);
-        }
-      });
-
-      // Combine data
-      const venuesWithData = venuesData.map(venue => ({
-        ...venue,
-        profiles: profilesMap.get(venue.owner_id),
-        venue_photos: photosMap.get(venue.id) || []
-      }));
-
       if (isNewSearch) {
-        setVenues(venuesWithData);
+        setVenues(data);
         setTotalCount(count || 0);
       } else {
-        setVenues(prev => [...prev, ...venuesWithData]);
+        setVenues((prev) => [...prev, ...data]);
       }
 
-      // Check if there's more
       const newOffset = fetchOffset + VENUES_PER_PAGE;
       setOffset(newOffset);
       setHasMore(count ? newOffset < count : false);
-
-    } catch (error) {
+    } catch {
       toast.error("Failed to load venues");
     } finally {
       setLoading(false);
@@ -293,23 +211,20 @@ export function AdminVenuesClient({ initialVenues }: AdminVenuesClientProps = {}
   const handleStatusChange = async (venueId: string, newStatus: string) => {
     setActionLoading(venueId);
     try {
-      const { error } = await supabase
-        .from('venues')
-        .update({ status: newStatus as 'approved' | 'pending' | 'rejected' | 'inactive' })
-        .eq('id', venueId);
-
-      if (error) throw error;
+      const result = await updateAdminVenueStatus(
+        venueId,
+        newStatus as 'approved' | 'pending' | 'rejected' | 'inactive'
+      );
+      if (!result.success) throw new Error(result.error);
 
       toast.success(`Venue ${newStatus} successfully!`);
-      
-      // Update local state instead of refetching everything
-      setVenues(prev => prev.map(v => 
-        v.id === venueId ? { ...v, status: newStatus as any } : v
-      ));
-      
-      // Update stats
+
+      setVenues((prev) =>
+        prev.map((v) => (v.id === venueId ? { ...v, status: newStatus as any } : v))
+      );
+
       fetchStats();
-      
+
       if (isDetailModalOpen && selectedVenue?.id === venueId) {
         setSelectedVenue((prev: any) => ({ ...prev, status: newStatus }));
       }
@@ -323,19 +238,14 @@ export function AdminVenuesClient({ initialVenues }: AdminVenuesClientProps = {}
   const handleToggleFeatured = async (venueId: string, featured: boolean) => {
     setActionLoading(venueId);
     try {
-      const { error } = await supabase
-        .from('venues')
-        .update({ featured })
-        .eq('id', venueId);
-
-      if (error) throw error;
+      const result = await setAdminVenueFeatured(venueId, featured);
+      if (!result.success) throw new Error(result.error);
 
       toast.success(featured ? "Venue set as featured" : "Venue removed from featured");
-      
-      // Update local state
-      setVenues(prev => prev.map(v => 
-        v.id === venueId ? { ...v, featured } : v
-      ));
+
+      setVenues((prev) =>
+        prev.map((v) => (v.id === venueId ? { ...v, featured } : v))
+      );
     } catch (error: any) {
       toast.error(error.message || "Failed to update featured status");
     } finally {
@@ -346,37 +256,13 @@ export function AdminVenuesClient({ initialVenues }: AdminVenuesClientProps = {}
   const handleViewDetails = async (venueId: string) => {
     setVenueLoading(true);
     setIsDetailModalOpen(true);
-    
+
     try {
-      const { data: venueData, error: venueError } = await supabase
-        .from('venues')
-        .select(`
-          *,
-          venue_photos(*),
-          venue_pricing_rules(*)
-        `)
-        .eq('id', venueId)
-        .single();
+      const { data, error } = await fetchAdminVenueDetail(venueId);
+      if (error || !data) throw new Error(error || "Venue not found");
 
-      if (venueError) throw venueError;
-
-      let profileData = null;
-      if (venueData.owner_id) {
-        const { data } = await supabase
-          .from('profiles')
-          .select('full_name, phone, whatsapp_number')
-          .eq('id', venueData.owner_id)
-          .single();
-        profileData = data;
-      }
-
-      const venueWithProfile = {
-        ...venueData,
-        profiles: profileData
-      };
-
-      setSelectedVenue(venueWithProfile);
-    } catch (error: any) {
+      setSelectedVenue(data);
+    } catch {
       toast.error("Failed to load venue details");
       setIsDetailModalOpen(false);
     } finally {

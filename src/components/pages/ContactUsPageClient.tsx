@@ -10,7 +10,7 @@ import { Footer } from "@/components/landing/Footer";
 import { Mail, Phone, Menu, LogOut } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { submitContactForm } from "@/lib/server-actions";
 import { useToast } from "@/hooks/use-toast";
 import ppLogo from "@/assets/pp logo.png";
 import Image from "next/image";
@@ -46,25 +46,21 @@ export function ContactUsPageClient() {
     setLoading(true);
 
     try {
-      const { error } = await supabase
-        .from('contact_submissions')
-        .insert([{
-          name: formData.name,
-          email: formData.email,
-          phone: formData.phone || null,
-          subject: formData.subject,
-          message: formData.message,
-          status: 'new'
-        }]);
+      const result = await submitContactForm({
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone || undefined,
+        subject: formData.subject,
+        message: formData.message,
+      });
 
-      if (error) throw error;
+      if (!result.success) throw new Error(result.error);
 
       toast({
         title: "Message Sent!",
         description: "Thank you for contacting us. We'll get back to you soon.",
       });
 
-      // Reset form
       setFormData({
         name: "",
         email: "",
@@ -72,7 +68,7 @@ export function ContactUsPageClient() {
         subject: "",
         message: ""
       });
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to send message. Please try again.",

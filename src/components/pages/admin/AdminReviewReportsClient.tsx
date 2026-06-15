@@ -2,7 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  getAdminSession,
+  fetchAdminReviewReports,
+  resolveAdminReviewReport,
+} from "@/lib/server-actions";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,51 +37,29 @@ export function AdminReviewReportsClient() {
   }, [user, filterStatus]);
 
   const checkUser = async () => {
-    const { data: { user: currentUser } } = await supabase.auth.getUser();
-    
-    if (!currentUser) {
+    const session = await getAdminSession();
+
+    if (!session.success || !session.user) {
+      if (session.error && session.error !== 'Not authenticated') {
+        toast.error("Access denied. Admins only.");
+        router.push('/');
+        return;
+      }
       router.push('/admin');
       return;
     }
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', currentUser.id)
-      .single();
-
-    if (profile?.role !== 'admin') {
-      toast.error("Access denied. Admins only.");
-      router.push('/');
-      return;
-    }
-
-    setUser(currentUser);
+    setUser(session.user);
   };
 
   const fetchReports = async () => {
     try {
       setLoading(true);
-      
-      let query = supabase
-        .from('review_reports')
-        .select(`
-          *,
-          venue:venues(name, slug),
-          review:venue_reviews(customer_name, review_text, rating, photo_urls),
-          reporter:profiles!review_reports_reporter_id_fkey(full_name)
-        `)
-        .order('created_at', { ascending: false });
 
-      if (filterStatus !== 'all') {
-        query = query.eq('status', filterStatus as 'approved' | 'pending' | 'rejected');
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-      setReports(data || []);
-    } catch (error: any) {
+      const { data, error } = await fetchAdminReviewReports(filterStatus);
+      if (error) throw new Error(error);
+      setReports(data);
+    } catch {
       toast.error("Failed to fetch reports");
     } finally {
       setLoading(false);
@@ -91,27 +73,13 @@ export function AdminReviewReportsClient() {
 
   const handleAction = async (reportId: string, action: 'approved' | 'rejected') => {
     try {
-      // Update report status
-      const { error: updateError } = await supabase
-        .from('review_reports')
-        .update({
-          status: action,
-          reviewed_at: new Date().toISOString(),
-          reviewed_by: user.id
-        })
-        .eq('id', reportId);
+      const report = reports.find((r) => r.id === reportId);
+      if (!report) throw new Error('Report not found');
 
-      if (updateError) throw updateError;
+      const result = await resolveAdminReviewReport(reportId, action, report.review_id);
+      if (!result.success) throw new Error(result.error);
 
-      // If approved, delete the review
       if (action === 'approved') {
-        const report = reports.find(r => r.id === reportId);
-        const { error: deleteError } = await supabase
-          .from('venue_reviews')
-          .delete()
-          .eq('id', report.review_id);
-
-        if (deleteError) throw deleteError;
         toast.success("Review deleted successfully");
       } else {
         toast.success("Report rejected");
@@ -119,7 +87,7 @@ export function AdminReviewReportsClient() {
 
       fetchReports();
       setSelectedReport(null);
-    } catch (error: any) {
+    } catch {
       toast.error("Failed to process report");
     } finally {
       setProcessing(false);

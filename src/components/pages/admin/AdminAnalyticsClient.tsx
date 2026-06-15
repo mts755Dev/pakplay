@@ -3,7 +3,7 @@
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { Card } from "@/components/ui/card";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { getAdminSession, fetchAdminAnalyticsPage } from "@/lib/server-actions";
 import { TrendingUp, Building2, Users, Calendar, DollarSign, Loader2, MapPin } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -39,26 +39,20 @@ export function AdminAnalyticsClient({ initialData }: AdminAnalyticsClientProps 
 
   const checkUser = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single();
-
-        if (profile?.role !== 'admin') {
+      const session = await getAdminSession();
+      if (!session.success || !session.user) {
+        if (session.error && session.error !== 'Not authenticated') {
           toast.error("Access denied. Admin only.");
           router.push('/');
           return;
         }
-
-        setUser(user);
-        if (!initialData) {
-          fetchAnalytics();
-        }
-      } else {
         router.push('/admin');
+        return;
+      }
+
+      setUser(session.user);
+      if (!initialData) {
+        fetchAnalytics();
       }
     } finally {
       setAuthChecking(false);
@@ -67,65 +61,10 @@ export function AdminAnalyticsClient({ initialData }: AdminAnalyticsClientProps 
 
   const fetchAnalytics = async () => {
     try {
-      const currentDate = new Date();
-      const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).toISOString();
-
-      // Fetch all data
-      const [venuesData, usersData, bookingsData] = await Promise.all([
-        supabase.from('venues').select('*'),
-        supabase.from('profiles').select('*'),
-        supabase.from('bookings').select('*')
-      ]);
-
-      // Calculate totals
-      const totalVenues = venuesData.data?.length || 0;
-      const totalUsers = usersData.data?.filter(u => u.role !== 'admin').length || 0;
-      const totalBookings = bookingsData.data?.length || 0;
-      const totalRevenue = bookingsData.data
-        ?.filter(b => b.status === 'confirmed' || b.status === 'completed')
-        .reduce((sum, b) => sum + (b.total_price || 0), 0) || 0;
-
-      // Calculate this month's growth
-      const venuesThisMonth = venuesData.data?.filter(v => v.created_at >= firstDayOfMonth).length || 0;
-      const usersThisMonth = usersData.data?.filter(u => u.created_at >= firstDayOfMonth && u.role !== 'admin').length || 0;
-      const bookingsThisMonth = bookingsData.data?.filter(b => b.created_at >= firstDayOfMonth).length || 0;
-      const revenueThisMonth = bookingsData.data
-        ?.filter(b => (b.status === 'confirmed' || b.status === 'completed') && b.created_at >= firstDayOfMonth)
-        .reduce((sum, b) => sum + (b.total_price || 0), 0) || 0;
-
-      // Group venues by sport
-      const sportCounts: any = {};
-      venuesData.data?.forEach(v => {
-        sportCounts[v.sport_type] = (sportCounts[v.sport_type] || 0) + 1;
-      });
-      const venuesBySport = Object.entries(sportCounts)
-        .map(([sport, count]) => ({ sport, count }))
-        .sort((a: any, b: any) => b.count - a.count);
-
-      // Group venues by city
-      const cityCounts: any = {};
-      venuesData.data?.forEach(v => {
-        cityCounts[v.city] = (cityCounts[v.city] || 0) + 1;
-      });
-      const venuesByCity = Object.entries(cityCounts)
-        .map(([city, count]) => ({ city, count }))
-        .sort((a: any, b: any) => b.count - a.count);
-
-      setAnalytics({
-        totalVenues,
-        totalUsers,
-        totalBookings,
-        totalRevenue,
-        venuesBySport,
-        venuesByCity,
-        growthStats: {
-          venuesThisMonth,
-          usersThisMonth,
-          bookingsThisMonth,
-          revenueThisMonth,
-        }
-      });
-    } catch (error) {
+      const { data, error } = await fetchAdminAnalyticsPage();
+      if (error || !data) throw new Error(error || "Failed to load analytics");
+      setAnalytics(data);
+    } catch {
       toast.error("Failed to load analytics");
     } finally {
       setLoading(false);

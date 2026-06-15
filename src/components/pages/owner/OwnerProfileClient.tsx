@@ -7,8 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import { toast } from "sonner";
-import { updateUserProfile } from "@/lib/server-actions";
-import { supabase } from "@/integrations/supabase/client";
+import { updateUserProfile, updateUserEmail } from "@/lib/server-actions";
 import { User, Loader2, Save, Building2, Calendar } from "lucide-react";
 import { Tables } from "@/integrations/supabase/types";
 import { signOutClient } from "@/lib/sign-out";
@@ -64,14 +63,9 @@ export function OwnerProfileClient({
           return;
         }
 
-        const { data: emailData, error: emailError } = await supabase.functions.invoke('update-email', {
-          body: { email: formData.email }
-        });
-
-        if (emailError) throw emailError;
-
-        if (!emailData?.success) {
-          throw new Error(emailData?.error || "Failed to update email");
+        const emailResult = await updateUserEmail(formData.email);
+        if (!emailResult.success) {
+          throw new Error(emailResult.error || "Failed to update email");
         }
 
         toast.success("Email updated successfully! Please sign in again with your new email.");

@@ -5,11 +5,9 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
-import { clearAuthSession } from "@/lib/sign-out";
+import { signInUser } from "@/lib/server-actions";
 import { Loader2, ArrowLeft } from "lucide-react";
 import ppLogo from "@/assets/pp logo.png";
 
@@ -18,7 +16,6 @@ export function SignInPageClient() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({ email: "", password: "" });
-  const router = useRouter();
 
   const validateForm = () => {
     let valid = true;
@@ -52,55 +49,36 @@ export function SignInPageClient() {
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const result = await signInUser({ email, password, mode: 'user' });
 
-      if (error) throw error;
-
-      if (data.user) {
-        // Fetch user role
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role, full_name, phone, whatsapp_number')
-          .eq('id', data.user.id)
-          .single();
-
-        // Block admins from signing in here
-        if (profile?.role === 'admin') {
-          clearAuthSession();
-          toast.error("Admins must sign in at /admin");
-          setLoading(false);
-          return;
-        }
-
-        // Cache auth data in localStorage so AuthContext picks it up instantly on redirect
-        if (profile?.role) {
-          localStorage.setItem('user_role', profile.role);
-          localStorage.setItem('user_logged_in', 'true');
-          localStorage.setItem('user_id', data.user.id);
-          localStorage.setItem('user_email', data.user.email || '');
-          if (profile.full_name) localStorage.setItem('user_full_name', profile.full_name);
-          if (profile.phone || profile.whatsapp_number) {
-            localStorage.setItem('user_phone', profile.phone || profile.whatsapp_number || '');
-          }
-        }
-
-        toast.success("Welcome back!");
-        
-        // Route based on role — owners go to dashboard, players go to home
-        setTimeout(() => {
-          if (profile?.role === 'venue_owner') {
-            window.location.href = '/owner/dashboard';
-          } else {
-            window.location.href = '/';
-          }
-        }, 100);
-        
-        // Keep loading state to prevent UI flicker
-        return;
+      if (!result.success || !result.userId) {
+        throw new Error(result.error || 'Sign in failed');
       }
+
+      const profile = result.profile;
+
+      if (profile?.role) {
+        localStorage.setItem('user_role', profile.role);
+        localStorage.setItem('user_logged_in', 'true');
+        localStorage.setItem('user_id', result.userId);
+        localStorage.setItem('user_email', result.email || '');
+        if (profile.full_name) localStorage.setItem('user_full_name', profile.full_name);
+        if (profile.phone || profile.whatsapp_number) {
+          localStorage.setItem('user_phone', profile.phone || profile.whatsapp_number || '');
+        }
+      }
+
+      toast.success("Welcome back!");
+
+      setTimeout(() => {
+        if (profile?.role === 'venue_owner') {
+          window.location.href = '/owner/dashboard';
+        } else {
+          window.location.href = '/';
+        }
+      }, 100);
+
+      return;
     } catch (error: any) {
       setLoading(false);
       if (error.message?.includes('fetch') || error.message?.includes('network') || !error.message) {

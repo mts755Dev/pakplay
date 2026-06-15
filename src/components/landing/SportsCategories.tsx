@@ -3,7 +3,7 @@
 import { Card } from "@/components/ui/card";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { fetchTopSports } from "@/lib/server-actions";
 
 // Sport emojis mapping
 const sportEmojis: Record<string, string> = {
@@ -29,29 +29,7 @@ export const SportsCategories = ({ initialSports = [] }: SportsCategoriesProps) 
   // Use initial sports from SSR
   const { data: sports = [] } = useQuery({
     queryKey: ['top-sports'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('venues' as any)
-        .select('sport_type')
-        .eq('status', 'approved');
-      
-      if (error) throw error;
-      
-      // Aggregate by sport type
-      const sportCounts: Record<string, number> = {};
-      data?.forEach((venue: any) => {
-        const sport = venue.sport_type;
-        sportCounts[sport] = (sportCounts[sport] || 0) + 1;
-      });
-      
-      // Convert to array and sort
-      const result = Object.entries(sportCounts)
-        .map(([sport_type, count]) => ({ sport_type, count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 6);
-      
-      return result as SportCount[];
-    },
+    queryFn: async () => fetchTopSports(6),
     initialData: initialSports,
     staleTime: 5 * 60 * 1000,
   });

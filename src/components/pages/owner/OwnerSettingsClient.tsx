@@ -7,8 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import { toast } from "sonner";
-import { updateOwnerVenueSubdomain, updateUserPassword } from "@/lib/server-actions";
-import { supabase } from "@/integrations/supabase/client";
+import { updateOwnerVenueSubdomain, updateUserPassword, deleteUserAccount } from "@/lib/server-actions";
 import { Loader2, Lock, AlertTriangle, Globe, Copy, Check, ExternalLink } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -142,10 +141,10 @@ export function OwnerSettingsClient({ initialVenues, userId }: OwnerSettingsClie
       // - All pricing rules for those venues
       // - All reviews for those venues
       // - All review reports for those reviews
-      const { error } = await supabase.rpc('delete_user_account');
+      const result = await deleteUserAccount();
       
-      if (error) {
-        toast.error(error.message || "Failed to delete account. Please try again.");
+      if (!result.success) {
+        toast.error(result.error || "Failed to delete account. Please try again.");
         return;
       }
 
