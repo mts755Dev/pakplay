@@ -1949,3 +1949,239 @@ export async function submitVenueReview(input: {
     return { success: false, error: error.message || 'Failed to submit review' };
   }
 }
+
+// ==================== CONTACT & AUTH ====================
+
+function createAuthActionClient() {
+  const cookieStore = cookies();
+  return createServerClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {
+            // Server actions may not set cookies in some contexts
+          }
+        },
+      },
+    }
+  );
+}
+
+export async function submitContactForm(input: {
+  name: string;
+  email: string;
+  phone?: string;
+  subject: string;
+  message: string;
+}) {
+  try {
+    const { error } = await supabaseServer.from('contact_submissions').insert({
+      name: input.name.trim(),
+      email: input.email.trim(),
+      phone: input.phone?.trim() || null,
+      subject: input.subject.trim(),
+      message: input.message.trim(),
+      status: 'new',
+    });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, error: null };
+  } catch (error: any) {
+    console.error('Error submitting contact form:', error);
+    return { success: false, error: error.message || 'Failed to send message' };
+  }
+}
+
+export async function signUpUser(input: {
+  email: string;
+  password: string;
+  fullName: string;
+  phone: string;
+  role: 'player' | 'venue_owner';
+  captchaToken: string;
+}) {
+  try {
+    const captcha = await verifyTurnstileToken(input.captchaToken);
+    if (!captcha.success) {
+      return { success: false, error: captcha.error || 'Captcha verification failed', userId: null };
+    }
+
+    const supabase = createAuthActionClient();
+    const { data, error } = await supabase.auth.signUp({
+      email: input.email.trim(),
+      password: input.password,
+      options: {
+        data: {
+          full_name: input.fullName.trim(),
+          phone: input.phone.trim(),
+          role: input.role,
+        },
+      },
+    });
+
+    if (error) {
+      return { success: false, error: error.message, userId: null };
+    }
+
+    if (!data.user) {
+      return { success: false, error: 'Failed to create account', userId: null };
+    }
+
+    const { error: profileError } = await supabaseServer.from('profiles').upsert(
+      {
+        id: data.user.id,
+        full_name: input.fullName.trim(),
+        phone: input.phone.trim(),
+        whatsapp_number: input.phone.trim(),
+        role: input.role,
+      },
+      { onConflict: 'id' }
+    );
+
+    if (profileError) {
+      console.error('Profile upsert error:', profileError);
+    }
+
+    return {
+      success: true,
+      error: null,
+      userId: data.user.id,
+      role: input.role,
+      email: input.email.trim(),
+      fullName: input.fullName.trim(),
+      phone: input.phone.trim(),
+    };
+  } catch (error: any) {
+    console.error('Error signing up user:', error);
+    return { success: false, error: error.message || 'Failed to create account', userId: null };
+  }
+}
+
+export async function updateUserPassword(newPassword: string) {
+  if (!newPassword || newPassword.length < 6) {
+    return { success: false, error: 'Password must be at least 6 characters' };
+  }
+
+  try {
+    const supabase = createAuthActionClient();
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      return { success: false, error: 'You must be signed in to update your password' };
+    }
+
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, error: null };
+  } catch (error: any) {
+    console.error('Error updating password:', error);
+    return { success: false, error: error.message || 'Failed to update password' };
+  }
+}
+
+export async function updateUserProfile(input: {
+  fullName?: string;
+  phone?: string;
+  whatsappNumber?: string;
+}) {
+  try {
+    const supabase = createAuthActionClient();
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      return { success: false, error: 'You must be signed in' };
+    }
+
+    const updates: {
+      full_name?: string;
+      phone?: string;
+      whatsapp_number?: string;
+    } = {};
+
+    if (input.fullName !== undefined) updates.full_name = input.fullName.trim();
+    if (input.phone !== undefined) updates.phone = input.phone.trim();
+    if (input.whatsappNumber !== undefined) updates.whatsapp_number = input.whatsappNumber.trim();
+
+    const { error } = await supabase
+      .from('profiles')
+      .update(updates)
+      .eq('id', user.id);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, error: null };
+  } catch (error: any) {
+    console.error('Error updating profile:', error);
+    return { success: false, error: error.message || 'Failed to update profile' };
+  }
+}
+
+export async function updateOwnerVenueSubdomain(
+  userId: string,
+  venueId: string,
+  subdomain: string | null
+) {
+  const normalizedSubdomain = subdomain?.trim().toLowerCase() || null;
+
+  if (normalizedSubdomain) {
+    const subdomainRegex = /^[a-z0-9-]+$/;
+    if (!subdomainRegex.test(normalizedSubdomain)) {
+      return { success: false, error: 'Subdomain can only contain lowercase letters, numbers, and hyphens' };
+    }
+    if (normalizedSubdomain.length < 3) {
+      return { success: false, error: 'Subdomain must be at least 3 characters long' };
+    }
+  }
+
+  try {
+    const venueAccess = await verifyOwnerVenueAccess(venueId, userId);
+    if (!venueAccess.ok) {
+      return { success: false, error: venueAccess.error };
+    }
+
+    if (normalizedSubdomain) {
+      const { data: existingVenue } = await supabaseServer
+        .from('venues')
+        .select('id')
+        .eq('subdomain', normalizedSubdomain)
+        .neq('id', venueId)
+        .maybeSingle();
+
+      if (existingVenue) {
+        return { success: false, error: 'This subdomain is already taken' };
+      }
+    }
+
+    const { error } = await supabaseServer
+      .from('venues')
+      .update({ subdomain: normalizedSubdomain })
+      .eq('id', venueId);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, error: null };
+  } catch (error: any) {
+    console.error('Error updating venue subdomain:', error);
+    return { success: false, error: error.message || 'Failed to update subdomain' };
+  }
+}

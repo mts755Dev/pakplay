@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/integrations/supabase/client";
 import { Settings as SettingsIcon, Loader2, Save, User, Lock } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { updateUserPassword, updateUserProfile } from "@/lib/server-actions";
 
 export function AdminSettingsClient() {
   const router = useRouter();
@@ -72,15 +73,14 @@ export function AdminSettingsClient() {
   const handleSaveProfile = async () => {
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          full_name: formData.full_name,
-          phone: formData.phone,
-        })
-        .eq('id', user.id);
+      const result = await updateUserProfile({
+        fullName: formData.full_name,
+        phone: formData.phone,
+      });
 
-      if (error) throw error;
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update profile');
+      }
 
       toast.success("Profile updated successfully!");
       checkUser();
@@ -104,11 +104,11 @@ export function AdminSettingsClient() {
 
     setSaving(true);
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: formData.newPassword
-      });
+      const result = await updateUserPassword(formData.newPassword);
 
-      if (error) throw error;
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update password');
+      }
 
       toast.success("Password updated successfully!");
       setFormData(prev => ({

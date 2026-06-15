@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
+import { toast } from "sonner";
+import { updateOwnerVenueSubdomain, updateUserPassword } from "@/lib/server-actions";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Lock, AlertTriangle, Globe, Copy, Check, ExternalLink } from "lucide-react";
-import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -47,41 +48,30 @@ export function OwnerSettingsClient({ initialVenues, userId }: OwnerSettingsClie
       return;
     }
 
-    // Validate subdomain format
-    const subdomainRegex = /^[a-z0-9-]+$/;
-    if (customSubdomain && !subdomainRegex.test(customSubdomain)) {
-      toast.error("Subdomain can only contain lowercase letters, numbers, and hyphens");
-      return;
-    }
-
-    if (customSubdomain && customSubdomain.length < 3) {
-      toast.error("Subdomain must be at least 3 characters long");
-      return;
-    }
-
-    // Check if subdomain is already taken
     if (customSubdomain) {
-      const { data: existingVenue } = await supabase
-        .from('venues')
-        .select('id')
-        .eq('subdomain', customSubdomain)
-        .neq('id', selectedVenue)
-        .single();
+      const subdomainRegex = /^[a-z0-9-]+$/;
+      if (!subdomainRegex.test(customSubdomain)) {
+        toast.error("Subdomain can only contain lowercase letters, numbers, and hyphens");
+        return;
+      }
 
-      if (existingVenue) {
-        toast.error("This subdomain is already taken");
+      if (customSubdomain.length < 3) {
+        toast.error("Subdomain must be at least 3 characters long");
         return;
       }
     }
 
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from('venues')
-        .update({ subdomain: customSubdomain || null })
-        .eq('id', selectedVenue);
+      const result = await updateOwnerVenueSubdomain(
+        userId,
+        selectedVenue,
+        customSubdomain || null
+      );
 
-      if (error) throw error;
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update subdomain');
+      }
 
       toast.success("Custom subdomain updated successfully!");
 
@@ -121,11 +111,11 @@ export function OwnerSettingsClient({ initialVenues, userId }: OwnerSettingsClie
 
     setSaving(true);
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: formData.newPassword
-      });
+      const result = await updateUserPassword(formData.newPassword);
 
-      if (error) throw error;
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update password');
+      }
 
       toast.success("Password updated successfully!");
       setFormData({

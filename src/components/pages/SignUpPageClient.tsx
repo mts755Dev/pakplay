@@ -9,9 +9,9 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Loader2, User, Building2, ArrowLeft } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { Turnstile } from "@marsidev/react-turnstile";
 import { TURNSTILE_SITE_KEY } from "@/lib/turnstile-config";
+import { signUpUser } from "@/lib/server-actions";
 import ppLogo from "@/assets/pp logo.png";
 
 export function SignUpPageClient() {
@@ -82,76 +82,37 @@ export function SignUpPageClient() {
 
     setLoading(true);
     try {
-      // Verify captcha with backend
-      const { data: verifyData, error: verifyError } = await supabase.functions.invoke('verify-turnstile', {
-        body: { token: captchaToken }
-      });
-
-      if (verifyError || !verifyData?.success) {
-        toast.error("Captcha verification failed. Please try again.");
-        setCaptchaToken("");
-        setTurnstileKey(prev => prev + 1);
-        setLoading(false);
-        return;
-      }
-
-      // Sign up with role in metadata
-      const { data, error } = await supabase.auth.signUp({
+      const result = await signUpUser({
         email: formData.email,
         password: formData.password,
-        options: {
-          data: {
-            full_name: formData.fullName,
-            phone: formData.phone,
-            role: role,
-          }
-        }
+        fullName: formData.fullName,
+        phone: formData.phone,
+        role,
+        captchaToken,
       });
 
-      if (error) throw error;
-
-      if (data.user) {
-        // Wait a moment for the trigger to create the profile
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        
-        // Upsert profile with role, phone, and WhatsApp number
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .upsert({
-            id: data.user.id,
-            full_name: formData.fullName,
-            phone: formData.phone,
-            whatsapp_number: formData.phone,
-            role: role,
-          }, {
-            onConflict: 'id'
-          });
-
-        if (profileError) {
-          console.error('Profile upsert error:', profileError);
-        }
-
-        // Cache auth details in localStorage
-        localStorage.setItem('user_role', role);
-        localStorage.setItem('user_logged_in', 'true');
-        localStorage.setItem('user_id', data.user.id);
-        localStorage.setItem('user_email', formData.email);
-        localStorage.setItem('user_full_name', formData.fullName);
-        localStorage.setItem('user_phone', formData.phone);
-
-        const roleMessage = role === 'venue_owner' 
-          ? 'You can now list your venues!' 
-          : 'Start booking your favorite sports venues!';
-        toast.success(`Account created successfully! ${roleMessage}`);
-        
-        // Route based on role
-        if (role === 'venue_owner') {
-          window.location.href = '/owner/dashboard';
-        } else {
-          window.location.href = '/';
-        }
-        return;
+      if (!result.success || !result.userId) {
+        throw new Error(result.error || 'Failed to create account');
       }
+
+      localStorage.setItem('user_role', result.role || role);
+      localStorage.setItem('user_logged_in', 'true');
+      localStorage.setItem('user_id', result.userId);
+      localStorage.setItem('user_email', result.email || formData.email);
+      localStorage.setItem('user_full_name', result.fullName || formData.fullName);
+      localStorage.setItem('user_phone', result.phone || formData.phone);
+
+      const roleMessage = role === 'venue_owner'
+        ? 'You can now list your venues!'
+        : 'Start booking your favorite sports venues!';
+      toast.success(`Account created successfully! ${roleMessage}`);
+
+      if (role === 'venue_owner') {
+        window.location.href = '/owner/dashboard';
+      } else {
+        window.location.href = '/';
+      }
+      return;
     } catch (error: any) {
       console.error('Signup error:', error);
       toast.error(error.message || "Failed to create account");

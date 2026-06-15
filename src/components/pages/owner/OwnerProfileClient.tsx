@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
+import { toast } from "sonner";
+import { updateUserProfile } from "@/lib/server-actions";
 import { supabase } from "@/integrations/supabase/client";
 import { User, Loader2, Save, Building2, Calendar } from "lucide-react";
-import { toast } from "sonner";
 import { Tables } from "@/integrations/supabase/types";
 import { signOutClient } from "@/lib/sign-out";
 
@@ -45,16 +46,15 @@ export function OwnerProfileClient({
     try {
       const emailChanged = formData.email !== userEmail;
 
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({
-          full_name: formData.full_name,
-          phone: formData.phone,
-          whatsapp_number: formData.whatsapp_number,
-        })
-        .eq('id', userId);
+      const result = await updateUserProfile({
+        fullName: formData.full_name,
+        phone: formData.phone,
+        whatsappNumber: formData.whatsapp_number,
+      });
 
-      if (profileError) throw profileError;
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update profile');
+      }
 
       if (emailChanged) {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
