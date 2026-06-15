@@ -514,7 +514,7 @@ export async function fetchVenueForEdit(venueId: string, userId: string) {
     const supabase = await getOwnerActionSupabase();
     const { data: venueData, error } = await supabase
       .from('venues')
-      .select('*, venue_photos(*), venue_pricing_rules(*)')
+      .select('*, venue_photos(*), venue_pricing_rules(*), venue_loyalty_tiers(*)')
       .eq('id', venueId)
       .eq('owner_id', userId)
       .maybeSingle();

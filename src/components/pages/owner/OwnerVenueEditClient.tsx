@@ -15,7 +15,6 @@ import { toast } from "sonner";
 import { LocationSelector } from "@/components/LocationSelector";
 import { uploadVenueLogo, uploadVenuePhotos } from "@/lib/file-utils";
 import {
-  fetchVenueLoyaltyTiers,
   updateOwnerVenue,
 } from "@/lib/server-actions";
 
@@ -26,7 +25,6 @@ interface OwnerVenueEditClientProps {
 }
 
 export function OwnerVenueEditClient({ venueId, initialVenue, userId }: OwnerVenueEditClientProps) {
-  console.log("Rendering OwnerVenueEditClient - Loyalty Tiers:", initialVenue?.venue_loyalty_tiers);
   const router = useRouter();
   const id = venueId;
   // Use initial venue data from server - no loading needed!
@@ -145,35 +143,44 @@ export function OwnerVenueEditClient({ venueId, initialVenue, userId }: OwnerVen
             return acc;
           }, []);
           setPricingRules(rules);
+        } else {
+          setPricingRules([]);
         }
 
-        // Load loyalty tiers
-        fetchVenueLoyaltyTiers(initialVenue.id).then(tiers => {
-          console.log('[OwnerVenueEdit] Loaded loyalty tiers:', tiers);
-          if (tiers.length > 0) {
-            setLoyaltyTiers(tiers.map(t => ({
-              tier_name: t.tier_name,
-              min_bookings: t.min_bookings.toString(),
-              discount_percent: t.discount_percent.toString(),
-            })));
-          } else {
-            console.log('[OwnerVenueEdit] No loyalty tiers found, section should still be visible');
-          }
-        }).catch(err => {
-          console.error('[OwnerVenueEdit] Error loading loyalty tiers:', err);
-        });
+        setLoyaltyTiers(
+          (initialVenue.venue_loyalty_tiers || []).map((t: {
+            tier_name: string;
+            min_bookings: number;
+            discount_percent: number;
+          }) => ({
+            tier_name: t.tier_name,
+            min_bookings: t.min_bookings.toString(),
+            discount_percent: t.discount_percent.toString(),
+          }))
+        );
       }
     } catch (error: any) {
       toast.error(error.message || "Failed to load venue");
       router.push('/owner/dashboard');
     }
-  }, [initialVenue]);
+  }, [initialVenue, router]);
 
-  // Debug: Log when loyaltyTiers changes
-  useEffect(() => {
-    console.log('[OwnerVenueEdit] loyaltyTiers state:', loyaltyTiers);
-    console.log('[OwnerVenueEdit] Loyalty Program section should be visible');
-  }, [loyaltyTiers]);
+  const addLoyaltyTier = () => {
+    if (loyaltyTiers.length >= 5) {
+      toast.error("Maximum 5 loyalty tiers allowed");
+      return;
+    }
+
+    const defaultNames = ['Silver', 'Gold', 'Platinum', 'Diamond', 'Elite'];
+    setLoyaltyTiers([
+      ...loyaltyTiers,
+      {
+        tier_name: defaultNames[loyaltyTiers.length] || `Tier ${loyaltyTiers.length + 1}`,
+        min_bookings: '',
+        discount_percent: '',
+      },
+    ]);
+  };
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -691,11 +698,7 @@ export function OwnerVenueEditClient({ venueId, initialVenue, userId }: OwnerVen
                     type="button" 
                     variant="outline" 
                     size="sm" 
-                    onClick={() => setLoyaltyTiers([...loyaltyTiers, {
-                      tier_name: loyaltyTiers.length === 0 ? 'Silver' : loyaltyTiers.length === 1 ? 'Gold' : 'Platinum',
-                      min_bookings: '',
-                      discount_percent: '',
-                    }])}
+                    onClick={addLoyaltyTier}
                   >
                     <Plus className="w-4 h-4 mr-1" />
                     Add Tier

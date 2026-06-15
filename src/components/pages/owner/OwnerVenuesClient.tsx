@@ -20,7 +20,6 @@ import { LocationSelector } from "@/components/LocationSelector";
 import { uploadVenueLogo, uploadVenuePhotos } from "@/lib/file-utils";
 import {
   fetchVenueForEdit,
-  fetchVenueLoyaltyTiers,
   fetchVenueReviewsForOwner,
   updateOwnerVenue,
   fetchOwnerVenuesList,
@@ -152,6 +151,34 @@ export function OwnerVenuesClient({ initialVenues, userId }: OwnerVenuesClientPr
     }
   };
 
+  const mapLoyaltyTiersFromVenue = (tiers: Array<{
+    tier_name: string;
+    min_bookings: number;
+    discount_percent: number;
+  }> | null | undefined) =>
+    (tiers || []).map((t) => ({
+      tier_name: t.tier_name,
+      min_bookings: t.min_bookings.toString(),
+      discount_percent: t.discount_percent.toString(),
+    }));
+
+  const addLoyaltyTier = () => {
+    if (loyaltyTiers.length >= 5) {
+      toast.error("Maximum 5 loyalty tiers allowed");
+      return;
+    }
+
+    const defaultNames = ['Silver', 'Gold', 'Platinum', 'Diamond', 'Elite'];
+    setLoyaltyTiers([
+      ...loyaltyTiers,
+      {
+        tier_name: defaultNames[loyaltyTiers.length] || `Tier ${loyaltyTiers.length + 1}`,
+        min_bookings: '',
+        discount_percent: '',
+      },
+    ]);
+  };
+
   const handleEditClick = async (venue: any) => {
     setEditLoadingId(venue.id);
     try {
@@ -162,13 +189,11 @@ export function OwnerVenuesClient({ initialVenues, userId }: OwnerVenuesClientPr
         return;
       }
 
-      setEditingVenue(venueData);
       setExistingPhotos(venueData.venue_photos || []);
       setNewPhotos([]);
       setNewPhotoPreviews([]);
       setPhotosToDelete([]);
-      
-      // Set logo preview if exists
+
       if (venueData.logo_url) {
         setLogoPreview(venueData.logo_url);
       } else {
@@ -225,18 +250,8 @@ export function OwnerVenuesClient({ initialVenues, userId }: OwnerVenuesClientPr
         setPricingRules([]);
       }
 
-      // Load loyalty tiers
-      const tiers = await fetchVenueLoyaltyTiers(venueData.id);
-      if (tiers.length > 0) {
-        setLoyaltyTiers(tiers.map(t => ({
-          tier_name: t.tier_name,
-          min_bookings: t.min_bookings.toString(),
-          discount_percent: t.discount_percent.toString(),
-        })));
-      } else {
-        setLoyaltyTiers([]);
-      }
-
+      setLoyaltyTiers(mapLoyaltyTiersFromVenue(venueData.venue_loyalty_tiers));
+      setEditingVenue(venueData);
     } catch (error) {
       toast.error("Failed to load venue details");
     } finally {
@@ -925,11 +940,7 @@ export function OwnerVenuesClient({ initialVenues, userId }: OwnerVenuesClientPr
                     type="button" 
                     variant="outline" 
                     size="sm"
-                    onClick={() => setLoyaltyTiers([...loyaltyTiers, {
-                      tier_name: loyaltyTiers.length === 0 ? 'Silver' : loyaltyTiers.length === 1 ? 'Gold' : 'Platinum',
-                      min_bookings: '',
-                      discount_percent: '',
-                    }])}
+                    onClick={addLoyaltyTier}
                   >
                     <Plus className="w-3 h-3 mr-1" />
                     Add Tier
