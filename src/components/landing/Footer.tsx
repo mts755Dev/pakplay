@@ -113,6 +113,11 @@ export const Footer = () => {
                   </Link>
                 </li>
                 <li>
+                  <Link href="/delete-account" className="hover:text-secondary-foreground transition-colors">
+                    Delete Account
+                  </Link>
+                </li>
+                <li>
                   <Link href="/terms" className="hover:text-secondary-foreground transition-colors">
                     Terms of Service
                   </Link>

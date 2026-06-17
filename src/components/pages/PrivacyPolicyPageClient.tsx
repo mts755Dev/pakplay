@@ -139,7 +139,20 @@ export function PrivacyPolicyPageClient() {
           </section>
 
           <section>
-            <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4">10. Contact Us</h2>
+            <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4">10. Account Deletion</h2>
+            <p className="text-sm sm:text-base text-foreground/80 leading-relaxed">
+              You may request deletion of your PakPlay account and associated personal data at any
+              time. For step-by-step instructions, what data is removed or retained, and processing
+              timelines, see our dedicated{" "}
+              <Link href="/delete-account" className="text-primary hover:underline">
+                Account &amp; Data Deletion
+              </Link>{" "}
+              page.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4">11. Contact Us</h2>
             <p className="text-sm sm:text-base text-foreground/80 leading-relaxed mb-4">
               If you have any questions about this Privacy Policy, please contact us:
             </p>

@@ -349,9 +349,23 @@ export function OwnerSettingsClient({ initialVenues, userId }: OwnerSettingsClie
                   <AlertDialogContent>
                     <AlertDialogHeader>
                       <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This action cannot be undone. This will permanently delete your account
-                        and remove all your data from our servers, including all your venues and bookings.
+                      <AlertDialogDescription className="space-y-3">
+                        <p>
+                          This action cannot be undone. This will permanently delete your account
+                          and remove all your data from our servers, including all your venues and bookings.
+                        </p>
+                        <p className="text-sm">
+                          Prefer email? See{" "}
+                          <a
+                            href="/delete-account"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary underline"
+                          >
+                            Account &amp; Data Deletion
+                          </a>{" "}
+                          for full instructions.
+                        </p>
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
